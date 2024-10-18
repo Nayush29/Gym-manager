@@ -14,6 +14,12 @@ class LicenseKeyGenerator:
         r"C:\Users\mayan\OneDrive\Documents\VS\Python Scripts\Gym Manager"
     )
 
+    # Constants for messages
+    INPUT_ERROR = (
+        "Please enter a valid positive number for the expiration duration in months."
+    )
+    UNEXPECTED_ERROR = "An unexpected error occurred:\n{}"
+
     def __init__(self, root):
         self.root = root
         self.root.title("License Key Generator")
@@ -29,15 +35,12 @@ class LicenseKeyGenerator:
             text="Enter the expiration duration in months.",
             font=("Arial", 13, "bold"),
         )
-
         self.expiration_label.pack(pady=10)
 
         self.expiration_entry = tk.Entry(self.root, font=("Arial", 16, "bold"))
         self.expiration_entry.pack(pady=5)
 
-        self.output_label = tk.Label(
-            self.root, text="", wraplength=300, font=("Arial", 10, "bold")
-        )
+        self.output_label = tk.Label(self.root, text="", font=("Arial", 10, "bold"))
         self.output_label.pack(pady=10)
 
         self.generate_button = tk.Button(
@@ -82,12 +85,9 @@ class LicenseKeyGenerator:
             os.chdir(self.GITHUB_REPO_PATH)
 
             subprocess.run(["git", "add", self.CSV_FILE_NAME], check=True)
-            subprocess.run(["git", "commit", "-m", f"Add new license key"], check=True)
+            subprocess.run(["git", "commit", "-m", "Add new license key"], check=True)
             subprocess.run(["git", "push", "origin", "master"], check=True)
 
-            messagebox.showinfo(
-                "Success", "New license key added and pushed to GitHub successfully."
-            )
         except subprocess.CalledProcessError as e:
             messagebox.showerror(
                 "Error", f"An error occurred while pushing to GitHub:\n{e}"
@@ -95,39 +95,50 @@ class LicenseKeyGenerator:
 
     def generate_key(self):
         """Generate a key and perform all operations."""
-        try:
-            self.output_label.config(text="Generating key... Please wait.")
-            self.generate_button.config(
-                state="disabled"
-            )  # Disable the button during processing
+        self.output_label.config(text="Generating key... Please wait.")
+        self.generate_button.config(
+            state="disabled"
+        )  # Disable the button during processing
 
-            # Get the number of months from the entry field
-            months = int(self.expiration_entry.get())
-            if months <= 0:
-                raise ValueError(
-                    "Please enter a positive number for the expiration duration in months."
-                )
+        try:
+            # Get the number of months from the entry field and validate input
+            months = self.validate_input(self.expiration_entry.get())
 
             # Generate the license key
             license_key = self.generate_license_key()
             self.save_key_to_csv(license_key, months)
-            # self.git_commit_and_push()
+            self.git_commit_and_push()  # Uncomment if you want to push to GitHub
 
-            # Update output label with generated key and expiration
-            self.output_label.config(
-                text=f"Generated Key: {license_key}\nExpiration: {months} month{'s' if months > 1 else ''}"
+            # Show generated key message box
+            messagebox.showinfo(
+                "Generated Key",
+                f"License Key: {license_key}\nExpiration: {months} month{'s' if months > 1 else ''}",
             )
 
+            self.root.quit()  # Use destroy to close the window safely
+
         except ValueError:
-            messagebox.showerror("Input Error", "Enter a valid input")
-            self.output_label.config(text="")  # Clear the output label on error
-        except Exception as e:
-            messagebox.showerror("Error", f"An unexpected error occurred:\n{str(e)}")
-            self.output_label.config(text="")  # Clear the output label on error
-        finally:
+            messagebox.showerror("Input Error", self.INPUT_ERROR)
+            self.output_label.config(text="")
             self.generate_button.config(
                 state="normal"
-            )  # Re-enable the button in all cases
+            )  # Clear the output label on error
+        except Exception as e:
+            messagebox.showerror("Error", self.UNEXPECTED_ERROR.format(str(e)))
+            self.output_label.config(text="")
+            self.generate_button.config(
+                state="normal"
+            )  # Clear the output label on error
+
+    def validate_input(self, input_value):
+        """Validate the input and return the number of months."""
+        if not input_value.strip().isdigit():
+            raise ValueError(self.INPUT_ERROR)
+
+        months = int(input_value)
+        if months <= 0:
+            raise ValueError(self.INPUT_ERROR)
+        return months
 
 
 if __name__ == "__main__":
