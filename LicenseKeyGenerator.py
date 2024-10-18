@@ -111,7 +111,7 @@ class LicenseKeyGenerator:
             # Generate the license key
             license_key = self.generate_license_key()
             self.save_key_to_csv(license_key, months)
-            self.git_commit_and_push()
+            # self.git_commit_and_push()
 
             # Update output label with generated key and expiration
             self.output_label.config(
