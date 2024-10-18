@@ -72,8 +72,8 @@ class LicenseKeyGenerator:
                 ["git", "commit", "-m", f"Add new license key {file_path}"], check=True
             )
 
-            # Push to the repository (assuming 'main' branch)
-            subprocess.run(["git", "push", "origin", "main"], check=True)
+            # Push to the repository (assuming 'master' branch)
+            subprocess.run(["git", "push", "origin", "master"], check=True)
 
             # Show success message
             messagebox.showinfo(
