@@ -63,7 +63,7 @@ class LicenseKeyGenerator:
 
             subprocess.run(["git", "add", self.CSV_FILE_NAME], check=True)
             subprocess.run(["git", "commit", "-m", f"Add new license key"], check=True)
-            subprocess.run(["git", "push", "master"], check=True)
+            subprocess.run(["git", "push", "origin", "master"], check=True)
 
             messagebox.showinfo(
                 "Success", "New license key added and pushed to GitHub successfully."
