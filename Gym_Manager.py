@@ -452,8 +452,8 @@
 #             conn = sqlite3.connect(self.db_path)
 #             cursor = conn.cursor()
 #             cursor.execute(
-#                 """INSERT INTO members 
-#                 (name, age, gender, phone_number, address, duration, fees, payment_method, date_of_activation) 
+#                 """INSERT INTO members
+#                 (name, age, gender, phone_number, address, duration, fees, payment_method, date_of_activation)
 #                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
 #                 (
 #                     member_name,
@@ -1003,25 +1003,25 @@
 #         cursor = conn.cursor()
 
 #         cursor.execute(
-#             """SELECT 
+#             """SELECT
 #                 COUNT(*) AS total_count,
 #                 COALESCE(SUM(CAST(REPLACE(fees, 'Rs', '') AS REAL)), 0) AS total_fees
-#             FROM members 
+#             FROM members
 #             WHERE strftime('%Y-%m', date_of_activation) = ?""",
 #             (month_year,),
 #         )
 #         new_members_details = cursor.fetchone() or (0, 0)
 
 #         cursor.execute(
-#             """SELECT COUNT(*) AS active_member_count 
-#             FROM members 
+#             """SELECT COUNT(*) AS active_member_count
+#             FROM members
 #             WHERE status = 'Active'"""
 #         )
 #         active_member_count = cursor.fetchone()[0]
 
 #         cursor.execute(
-#             """SELECT COUNT(*) 
-#             FROM members 
+#             """SELECT COUNT(*)
+#             FROM members
 #             WHERE status = 'Inactive' AND strftime('%Y-%m', expiration_date) = ?""",
 #             (month_year,),
 #         )
@@ -1133,7 +1133,7 @@
 
 #             cursor.execute(
 #                 """SELECT id, name, phone_number , duration, expiration_date
-#                 FROM members 
+#                 FROM members
 #                 WHERE status = 'Inactive' AND strftime('%Y-%m', expiration_date) = ?""",
 #                 (self.expiration_month,),
 #             )
@@ -1208,8 +1208,8 @@
 #             cursor = conn.cursor()
 
 #             cursor.execute(
-#                 """SELECT name, phone_number, duration, fees, date_of_activation, status 
-#                 FROM members 
+#                 """SELECT name, phone_number, duration, fees, date_of_activation, status
+#                 FROM members
 #                 WHERE id = ?""",
 #                 (values[0],),
 #             )
@@ -1425,8 +1425,8 @@
 #             cursor = conn.cursor()
 
 #             cursor.execute(
-#                 """SELECT id, name, phone_number, duration, expiration_date FROM members 
-#                 WHERE status = 'Inactive' AND strftime('%Y-%m', expiration_date) = ? 
+#                 """SELECT id, name, phone_number, duration, expiration_date FROM members
+#                 WHERE status = 'Inactive' AND strftime('%Y-%m', expiration_date) = ?
 #                 AND notified = 'False'""",
 #                 (self.expiration_month,),
 #             )
@@ -1511,6 +1511,7 @@ from io import StringIO
 import tkinter as tk
 from tkinter import messagebox
 
+
 class GymManagerApp:
     def __init__(self, root):
         self.root = root
@@ -1525,47 +1526,67 @@ class GymManagerApp:
         self.license_entry.focus()
 
         # Validate Button
-        self.validate_button = tk.Button(root, text="Validate", command=self.validate_license)
+        self.validate_button = tk.Button(
+            root, text="Validate", command=self.validate_license
+        )
         self.validate_button.pack(pady=20)
 
     def check_license_key(self, license_key):
-        """Check the license key and its expiration type against a file hosted on GitHub."""
-        url = "https://raw.githubusercontent.com/Nayush29/Gym-manager/main/License_keys.csv"
+        """Check the license key and its expiration date against a file hosted on GitHub."""
+        url = "https://raw.githubusercontent.com/Nayush29/Gym-manager/master/License_keys.csv"
 
         try:
+            # Fetch the CSV file from GitHub
             response = requests.get(url)
-            response.raise_for_status()
+            response.raise_for_status()  # Raise error if request failed
 
-            csv_content = StringIO(response.text)
-            df = pd.read_csv(csv_content)
+            # Load the CSV content into a pandas DataFrame
+            df = pd.read_csv(StringIO(response.text))
 
-            if 'License Key' not in df.columns or 'Expiration Type' not in df.columns:
+            # Ensure the necessary columns are present
+            required_columns = {"License Key", "Expiration Date"}
+            if not required_columns.issubset(df.columns):
+                return False  # Return False if columns are missing
+
+            # Filter the DataFrame for the provided license key
+            matching_license = df[df["License Key"].str.strip() == license_key.strip()]
+
+            if matching_license.empty:
+                messagebox.showerror(
+                    "License Key Not Found", f"License key '{license_key}' not found."
+                )
                 return False
 
+            # Get and parse the expiration date
+            expiration_date_str = matching_license.iloc[0]["Expiration Date"].strip()
+            expiration_date = datetime.strptime(expiration_date_str, "%Y-%m-%d").date()
+
+            # Get the current date
             current_date = datetime.now().date()
 
-            for _, row in df.iterrows():
-                if row['License Key'] == license_key:
-                    expiration_type = row['Expiration Type']
-
-                    if 'month' in expiration_type.lower():
-                        months = int(expiration_type.split()[0])
-                        expiration_date = current_date + timedelta(days=30 * months)
-                    else:
-                        return False
-
-                    if current_date <= expiration_date:
-                        return True  # License is valid and not expired
-                    else:
-                        print(f"License key '{license_key}' has expired on {expiration_date}.")
-                        return False  # License has expired
-
-            print(f"License key '{license_key}' not found.")
-            return False  # License key not found
+            # Check if the license is still valid
+            if current_date <= expiration_date:
+                messagebox.showinfo(
+                    "License Key Valid",
+                    f"License key '{license_key}' is valid until {expiration_date}.",
+                )
+                return True  # License is valid
+            else:
+                messagebox.showerror(
+                    "License Key Expired",
+                    f"License key '{license_key}' expired on {expiration_date}.",
+                )
+                return False  # License has expired
 
         except requests.exceptions.RequestException as e:
-            print(f"Error fetching license keys: {e}")
-            return False  # Return False in case of an error
+            messagebox.showerror(
+                "Error", f"Failed to fetch the license file from GitHub: {e}"
+            )
+            return False  # Error during HTTP request
+
+        except Exception as e:
+            messagebox.showerror("Error", f"An unexpected error occurred: {e}")
+            return False  # Catch-all for other exceptions
 
     def validate_license(self):
         """Validate the entered license key."""
@@ -1573,13 +1594,14 @@ class GymManagerApp:
         if not license_key:  # Check if the entry is empty
             messagebox.showerror("Error", "License key cannot be empty.")
             return
-        
+
         # Validate the license key
         is_valid = self.check_license_key(license_key)
         if is_valid:
             messagebox.showinfo("Success", "License key is valid.")
         else:
             messagebox.showerror("Error", "Invalid or expired license key.")
+
 
 if __name__ == "__main__":
     root = tk.Tk()
