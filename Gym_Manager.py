@@ -66,6 +66,16 @@ class GymManagerApp:
             )
             """
         )
+
+        cursor.execute(
+            """
+        CREATE TABLE IF NOT EXISTS app_data (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            message_count INTEGER DEFAULT 0,
+            license_key TEXT
+        )
+    """
+        )
         conn.commit()
         conn.close()
 
@@ -169,124 +179,6 @@ class GymManagerApp:
     def on_resize(self, event):
         """Handle window resize events to adjust the background image."""
         self.load_and_resize_image()
-
-    def create_license_key_interface(self):
-        """Create the license key entry interface and display license expiration message."""
-        self.center_frame = tk.Frame(self.background_image)
-        self.center_frame.pack(expand=True, fill=tk.NONE)
-
-        title_label = tk.Label(
-            self.center_frame,
-            text="License Key Information",
-            font=("Arial", 25, "bold"),
-        )
-        title_label.grid(row=0, column=0, columnspan=2, pady=20)
-
-        message_label = tk.Label(
-            self.center_frame,
-            text="Your license for the WhatsApp API has expired. Please renew to continue using the service.",
-            font=("Arial", 20, "bold"),
-            fg="red",
-            wraplength=700,
-        )
-        message_label.grid(row=1, column=0, padx=20, columnspan=2)
-
-        license_label = tk.Label(
-            self.center_frame, text="Enter License Key:", font=("Arial", 15, "bold")
-        )
-        license_label.grid(row=2, column=0, pady=10, sticky="e")
-
-        self.license_entry = tk.Entry(self.center_frame, width=30, font=("Arial", 15))
-        self.license_entry.grid(row=2, column=1, pady=10, sticky="w")
-        self.license_entry.focus()
-
-        self.license_entry.bind("<KeyRelease>", self.process_license_key)
-
-        validate_button = tk.Button(
-            self.center_frame,
-            text="Validate",
-            font=("Arial", 13, "bold"),
-            bg="blue",
-            fg="white",
-            command=lambda: self.check_license_key(self.license_entry.get()),
-        )
-        validate_button.grid(row=3, column=0, columnspan=2, pady=20)
-
-    def process_license_key(self, event):
-        """Validate and format the license key with '-' after every 4 characters, allowing only alphanumeric characters."""
-
-        value = self.license_entry.get().upper()
-
-        allowed_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-
-        filtered_value = "".join(char for char in value if char in allowed_chars)
-
-        limited_value = filtered_value[:16]
-
-        formatted_value = "-".join(
-            limited_value[i : i + 4] for i in range(0, len(limited_value), 4)
-        )
-
-        self.license_entry.delete(0, tk.END)
-        self.license_entry.insert(0, formatted_value)
-
-    def check_license_key(self, license_key):
-        """Check the license key and its expiration date against a file hosted on GitHub."""
-
-        if license_key == "":
-            messagebox.showerror("Error", "License key cannot be empty.")
-            return
-        elif len(license_key.replace("-", "")) < 16:
-            messagebox.showerror("Error", "License key must be 16 characters long.")
-            return
-
-        url = "https://raw.githubusercontent.com/Nayush29/Gym-manager/master/License_keys.csv"
-
-        try:
-            response = requests.get(url)
-            response.raise_for_status()
-
-            df = pd.read_csv(StringIO(response.text))
-
-            required_columns = {"License Key", "Expiration Date"}
-            if not required_columns.issubset(df.columns):
-                return False
-
-            matching_license = df[df["License Key"].str.strip() == license_key.strip()]
-
-            if matching_license.empty:
-                messagebox.showerror(
-                    "License Key Not Found", f"License key '{license_key}' not found."
-                )
-                return False
-
-            expiration_date_str = matching_license.iloc[0]["Expiration Date"].strip()
-            expiration_date = datetime.strptime(expiration_date_str, "%Y-%m-%d").date()
-
-            current_date = datetime.now().date()
-
-            if current_date <= expiration_date:
-                messagebox.showinfo(
-                    "License Key Valid",
-                    f"License key '{license_key}' is valid until {expiration_date}.",
-                )
-                return True
-            else:
-                messagebox.showerror(
-                    "License Key Expired",
-                    f"License key '{license_key}' expired on {expiration_date}.",
-                )
-                return False
-
-        except requests.exceptions.RequestException as e:
-            messagebox.showerror(
-                "Error", f"Failed to fetch the license file from GitHub: {e}"
-            )
-            return False
-
-        except Exception as e:
-            messagebox.showerror("Error", f"An unexpected error occurred: {e}")
-            return False
 
     def create_buttons(self):
         """Create and add buttons to the sidebar."""
@@ -1493,6 +1385,16 @@ class GymManagerApp:
 
     def send_whatsapp_message(self):
         """Send WhatsApp messages to a list of users if logged in."""
+        self.message_count = self.load_message_count()
+        self.license_valid = self.load_license_key()
+
+        if self.message_count >= 20 and not self.license_valid:
+            messagebox.showwarning(
+                "License Required",
+                "You have reached the free limit of 20 messages. Please enter a valid license key to continue.",
+            )
+            self.create_license_key_interface()
+            return
 
         try:
             conn = sqlite3.connect(self.db_path)
@@ -1524,6 +1426,8 @@ class GymManagerApp:
 
             for row in rows:
                 self.process_row_and_send_message(row)
+                self.message_count += 1
+                self.save_app_data(message_count=self.message_count)
 
             self.root.deiconify()
             self.root.state("zoomed")
@@ -1536,6 +1440,210 @@ class GymManagerApp:
             self.root.deiconify()
             self.root.state("zoomed")
             messagebox.showerror("Error", f"Failed to send messages: {str(e)}")
+
+    def load_message_count(self):
+        """Load the message count from the app_data table."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT message_count FROM app_data ORDER BY id DESC LIMIT 1"
+                )
+                result = cursor.fetchone()
+
+            return result[0] if result else 0
+
+        except sqlite3.Error as e:
+            messagebox.showerror("Database Error", f"Error loading message count: {e}")
+            return 0
+
+    def load_license_key(self):
+        """Load the license key from the app_data table and check its validity."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT license_key FROM app_data ORDER BY id DESC LIMIT 1"
+                )
+                result = cursor.fetchone()
+
+            license_key = result[0]
+
+            if license_key is not None:
+                self.license_valid = self.check_license_key(license_key)
+            else:
+                self.license_valid = False
+
+        except sqlite3.Error as e:
+            messagebox.showerror("Database Error", f"Error loading license key: {e}")
+            self.license_valid = False
+
+    def save_app_data(self, message_count=None, license_key=None):
+        """Save the message count and license key to the app_data table."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+
+                cursor.execute("SELECT id FROM app_data LIMIT 1")
+                exists = cursor.fetchone()
+
+                if exists:
+                    cursor.execute(
+                        """
+                        UPDATE app_data
+                        SET message_count = COALESCE(?, message_count),
+                            license_key = COALESCE(?, license_key)
+                        WHERE id = ?
+                        """,
+                        (message_count, license_key, exists[0]),
+                    )
+                else:
+                    cursor.execute(
+                        """
+                        INSERT INTO app_data (message_count, license_key)
+                        VALUES (?, ?)
+                        """,
+                        (message_count, license_key),
+                    )
+
+                conn.commit()
+
+        except sqlite3.Error as e:
+            messagebox.showerror("Database Error", f"Error saving app data: {e}")
+
+    def create_license_key_interface(self):
+        """Create the license key entry interface and display license expiration message."""
+        self.clear_main_frame()
+        self.center_frame = tk.Frame(self.background_image)
+        self.center_frame.pack(expand=True, fill=tk.NONE)
+
+        title_label = tk.Label(
+            self.center_frame,
+            text="License Key Information",
+            font=("Arial", 25, "bold"),
+        )
+        title_label.grid(row=0, column=0, columnspan=2, pady=20)
+
+        message_label = tk.Label(
+            self.center_frame,
+            text="Your license for the WhatsApp API has expired. Please renew to continue using the service.",
+            font=("Arial", 20, "bold"),
+            fg="red",
+            wraplength=700,
+        )
+        message_label.grid(row=1, column=0, padx=20, columnspan=2)
+
+        license_label = tk.Label(
+            self.center_frame, text="Enter License Key:", font=("Arial", 15, "bold")
+        )
+        license_label.grid(row=2, column=0, pady=10, sticky="e")
+
+        self.license_entry = tk.Entry(self.center_frame, width=30, font=("Arial", 15))
+        self.license_entry.grid(row=2, column=1, pady=10, sticky="w")
+        self.license_entry.focus()
+
+        self.license_entry.bind("<KeyRelease>", self.process_license_key)
+
+        buttons_frame = tk.Frame(self.center_frame)
+        buttons_frame.grid(row=3, column=0, columnspan=2, pady=25)
+
+        validate_button = tk.Button(
+            buttons_frame,
+            text="Validate",
+            font=("Arial", 13, "bold"),
+            bg="blue",
+            fg="white",
+            command=lambda: self.check_license_key(self.license_entry.get()),
+        )
+        validate_button.pack(side="left")
+
+        back_button = tk.Button(
+            buttons_frame,
+            text="Cancel",
+            font=("Arial", 13, "bold"),
+            bg="red",
+            fg="white",
+            command=lambda: (
+                self.clear_main_frame(),
+                self.show_gym_accounts(),
+                self.back_button(),
+            ),
+        )
+        back_button.pack(side="right", padx=20)
+
+    def process_license_key(self, event):
+        """Validate and format the license key with '-' after every 4 characters, allowing only alphanumeric characters."""
+        value = self.license_entry.get().upper()
+
+        allowed_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+        filtered_value = "".join(char for char in value if char in allowed_chars)
+
+        limited_value = filtered_value[:16]
+
+        formatted_value = "-".join(
+            limited_value[i : i + 4] for i in range(0, len(limited_value), 4)
+        )
+
+        self.license_entry.delete(0, tk.END)
+        self.license_entry.insert(0, formatted_value)
+
+    def check_license_key(self, license_key):
+        """Check the license key and its expiration date against a file hosted on GitHub."""
+        if license_key == "":
+            messagebox.showerror("Error", "License key cannot be empty.")
+            return
+        elif len(license_key.replace("-", "")) < 16:
+            messagebox.showerror("Error", "License key must be 16 characters long.")
+            return
+
+        url = "https://raw.githubusercontent.com/Nayush29/Gym-manager/master/License_keys.csv"
+
+        try:
+            response = requests.get(url)
+            response.raise_for_status()
+
+            df = pd.read_csv(StringIO(response.text))
+
+            required_columns = {"License Key", "Expiration Date"}
+            if not required_columns.issubset(df.columns):
+                return False
+
+            matching_license = df[df["License Key"].str.strip() == license_key.strip()]
+
+            if matching_license.empty:
+                messagebox.showerror(
+                    "License Key Not Found", f"License key '{license_key}' not found."
+                )
+                return False
+
+            expiration_date_str = matching_license.iloc[0]["Expiration Date"].strip()
+            expiration_date = datetime.strptime(expiration_date_str, "%Y-%m-%d").date()
+
+            current_date = datetime.now().date()
+
+            if current_date <= expiration_date:
+                messagebox.showinfo(
+                    "License Key Valid",
+                    f"License key '{license_key}' is valid until {expiration_date}.",
+                )
+                return True
+            else:
+                messagebox.showerror(
+                    "License Key Expired",
+                    f"License key '{license_key}' expired on {expiration_date}.",
+                )
+                return False
+
+        except requests.exceptions.RequestException as e:
+            messagebox.showerror(
+                "Error", f"Failed to fetch the license file from GitHub: {e}"
+            )
+            return False
+
+        except Exception as e:
+            messagebox.showerror("Error", f"An unexpected error occurred: {e}")
+            return False
 
     def process_row_and_send_message(self, row):
         """Process each row of data and send a message."""
