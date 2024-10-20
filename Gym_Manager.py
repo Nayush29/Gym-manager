@@ -17,36 +17,47 @@ import babel.numbers
 
 
 def adapt_date(date_obj):
+    """Converts a date object to a string in ISO format for storage in SQLite."""
+    # Convert the date object to ISO format (YYYY-MM-DD) for database storage
     return date_obj.isoformat()
 
 
 def convert_date(date_text):
+    """Converts a byte string from the database back into a date object."""
+    # Convert the date text (byte string) from the database to a date object
     return datetime.strptime(date_text.decode("utf-8"), "%Y-%m-%d").date()
 
 
+# Register the adapter and converter to handle date objects in SQLite
 sqlite3.register_adapter(date, adapt_date)
 sqlite3.register_converter("date", convert_date)
 
 
 class GymManagerApp:
     def __init__(self, root):
+        """Initializes the Gym Manager application."""
         self.root = root
-        self.root.state("zoomed")
-        self.root.title("Gym Manager")
+        self.root.state("zoomed")  # Set the window to fullscreen/zoomed mode
+        self.root.title("Gym Manager")  # Set the window title
 
+        # Define paths for the database and the configuration file (for image path)
         self.db_path = os.path.join(os.path.dirname(sys.executable), "gym.db")
         self.config_path = os.path.join(
             os.path.dirname(sys.executable), "image_path.txt"
         )
 
-        self.create_table()
-        self.update_expired_members()
-        self.setup_ui()
+        self.create_table()  # Create database tables if they don't exist
+
+        # Check and update member statuses based on expiration dates
+        if self.update_expired_members():
+            self.setup_ui()  # Set up the user interface after status update
 
     def create_table(self):
-        """Creates the 'members' table in the database if it doesn't exist."""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+        """Creates the 'members' and 'app_data' tables in the database if they don't exist."""
+        conn = sqlite3.connect(self.db_path)  # Connect to the SQLite database
+        cursor = conn.cursor()  # Create a cursor for executing SQL queries
+
+        # Create 'members' table with attributes like name, age, gender, duration, fees, etc.
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS members (
@@ -55,7 +66,6 @@ class GymManagerApp:
                 age INTEGER NOT NULL,
                 gender TEXT NOT NULL,
                 phone_number TEXT NOT NULL,
-                address TEXT NOT NULL,
                 duration TEXT NOT NULL,
                 fees REAL NOT NULL,
                 payment_method TEXT NOT NULL,
@@ -67,188 +77,247 @@ class GymManagerApp:
             """
         )
 
+        # Create 'app_data' table for storing application-related info (e.g., message count, license expiration)
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS app_data (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 message_count INTEGER DEFAULT 0,
-                license_key TEXT DEFAULT 'LVHZ-7169-ZRXT-6652'
+                license_key_expiration TEXT DEFAULT NULL
             )
             """
         )
-        conn.commit()
-        conn.close()
+
+        conn.commit()  # Commit changes to the database
+        conn.close()  # Close the connection
 
     def update_expired_members(self):
+        """Checks and updates the status of members based on their expiration date."""
         try:
+            # Connect to the SQLite database
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
-            current_date = datetime.now().date()
+            current_date = datetime.now().date()  # Get today's date
 
+            # Fetch active members' data (id, duration, date_of_activation)
             cursor.execute(
                 "SELECT id, duration, date_of_activation FROM members WHERE status = 'Active'"
             )
-            rows = cursor.fetchall()
+            rows = cursor.fetchall()  # Get all rows with active members
 
+            updates = []  # List to hold data for updating expiration and status
             for member_id, duration_str, date_of_activation in rows:
+                # Extract the duration in months (e.g., '6 months' -> 6)
                 duration_months = int(duration_str.split()[0])
 
+                # Convert the date_of_activation string to a date object
                 activation_date = datetime.strptime(
                     date_of_activation, "%Y-%m-%d"
                 ).date()
 
+                # Calculate expiration date (activation_date + duration)
                 expiration_date = activation_date + relativedelta(
                     months=duration_months
                 )
 
+                # If current date is past the expiration date, mark member as 'Inactive'
                 if current_date > expiration_date:
-                    cursor.execute(
-                        "UPDATE members SET status = 'Inactive', expiration_date = ?, notified = 'False' WHERE id = ?",
-                        (expiration_date, member_id),
-                    )
+                    updates.append((expiration_date, "Inactive", member_id))
                 else:
-                    cursor.execute(
-                        "UPDATE members SET expiration_date = ? WHERE id = ?",
-                        (expiration_date, member_id),
-                    )
+                    # Otherwise, update expiration date and keep the member 'Active'
+                    updates.append((expiration_date, "Active", member_id))
 
-            conn.commit()
+            # If there are updates to make, execute them in the database
+            if updates:
+                cursor.executemany(
+                    "UPDATE members SET expiration_date = ?, status = ? WHERE id = ?",
+                    updates,
+                )
+
+            conn.commit()  # Commit the changes to the database
+            return True  # Indicate successful update
 
         except Exception as e:
+            # Show an error message if an exception occurs
             messagebox.showerror("Database Error", f"An error occurred: {e}")
+            return False  # Indicate an error occurred
+
         finally:
-            conn.close()
+            conn.close()  # Ensure the database connection is closed
 
     def setup_ui(self):
-        self.background_image = tk.Label(self.root)
-        self.background_image.pack(fill=tk.BOTH, expand=True)
+        """Sets up the user interface for the Gym Manager application."""
+        self.background_image = tk.Label(
+            self.root
+        )  # Create a label for the background image
+        self.background_image.pack(
+            fill=tk.BOTH, expand=True
+        )  # Fill the window with the background image
 
+        # Load the image path from the configuration file
         self.image_path = self.load_image_path()
 
+        # If no image path is found, prompt the user to select an image
         if not self.image_path:
             self.image_path = filedialog.askopenfilename(
                 title="Select an Image File",
                 filetypes=[("Image Files", "*.png;*.jpg;*.jpeg;*.bmp;*.gif")],
             )
+            # Save the selected image path
             if self.image_path:
                 self.save_image_path(self.image_path)
             else:
-                self.root.destroy()
+                self.root.destroy()  # Exit the app if no image is selected
                 return
 
-        self.photo = None
-        self.load_and_resize_image()
+        self.photo = None  # Initialize the photo attribute for the background image
+        # Bind the window resize event to dynamically resize the background image
+        self.root.bind("<Configure>", self.load_and_resize_image)
 
-        self.root.bind("<Configure>", self.on_resize)
-
-        self.sidebar_frame = tk.Frame(self.background_image)
-        self.sidebar_frame.pack(padx=30, side=tk.LEFT)
-
-        self.create_buttons()
+        self.create_buttons()  # Create buttons for the app's user interface
 
     def load_image_path(self):
         """Load the saved image path from the file."""
+        # Check if the config file exists
         if os.path.exists(self.config_path):
+            # Open the file in read mode and return the first line as the image path
             with open(self.config_path, "r") as file:
                 return file.readline().strip()
+        # Return None if the config file does not exist
         return None
 
     def save_image_path(self, path):
         """Save the image path to the file."""
+        # Open the config file in write mode and save the image path to it
         with open(self.config_path, "w") as file:
             file.write(path)
 
-    def load_and_resize_image(self):
+    def load_and_resize_image(self, event):
         """Update the background image to fit the window."""
         try:
+            # Open the image from the saved path
             image = Image.open(self.image_path)
+            # Get the current width and height of the window
             width, height = self.root.winfo_width(), self.root.winfo_height()
 
+            # Check if there's an existing image and if its size matches the new size
             if self.photo:
                 old_width, old_height = self.photo.width(), self.photo.height()
+                # If the sizes are the same, no need to resize, so return
                 if old_width == width and old_height == height:
                     return
 
+            # Resize the image to fit the new window dimensions using the LANCZOS filter
             resized_image = image.resize((width, height), Image.LANCZOS)
+            # Convert the resized image to a format compatible with Tkinter
             self.photo = ImageTk.PhotoImage(resized_image)
+            # Update the background image with the resized version
             self.background_image.config(image=self.photo)
-            self.background_image.image = self.photo
-        except Exception as e:
-            pass
 
-    def on_resize(self, event):
-        """Handle window resize events to adjust the background image."""
-        self.load_and_resize_image()
+        except Exception as e:
+            # Display an error message if image loading or resizing fails
+            messagebox.showerror("Image Error", f"Failed to load the image: {e}")
 
     def create_buttons(self):
         """Create and add buttons to the sidebar."""
+        # Create a sidebar frame for buttons
+        self.sidebar_frame = tk.Frame(self.background_image)
+        self.sidebar_frame.pack(padx=30, side=tk.LEFT)  # Pack the sidebar to the left
+
+        # List of button labels to be created
         button_data = ["Add Member", "View Member Details", "Gym Accounts", "Exit"]
 
+        # Loop through each label in button_data
         for label in button_data:
+            # If the label is "Exit", create a button to close the window
             if label == "Exit":
                 button = tk.Button(
-                    self.sidebar_frame,
-                    text=label,
-                    bg="white",
-                    fg="black",
-                    font=("Segoe UI", 20, "bold"),
-                    width=20,
-                    command=lambda: self.root.destroy(),
+                    self.sidebar_frame,  # Add the button to the sidebar frame
+                    text=label,  # Set the button label to "Exit"
+                    bg="white",  # Background color of the button
+                    fg="black",  # Text color of the button
+                    font=("Segoe UI", 20, "bold"),  # Font styling
+                    width=20,  # Set the button width
+                    command=lambda: self.root.quit(),  # Close the app when clicked
                 )
+                # Add the button to the sidebar using pack layout
                 button.pack()
             else:
+                # For other buttons, create them with a different command
                 button = tk.Button(
-                    self.sidebar_frame,
-                    text=label,
-                    bg="white",
-                    fg="black",
-                    font=("Segoe UI", 20, "bold"),
+                    self.sidebar_frame,  # Add the button to the sidebar frame
+                    text=label,  # Set the button label to current label
+                    bg="white",  # Background color of the button
+                    fg="black",  # Text color of the button
+                    font=("Segoe UI", 20, "bold"),  # Font styling
                     command=lambda l=label: self.show_content(l),
-                    width=20,
+                    # Capture the current label with lambda
+                    width=20,  # Set the button width
                 )
+                # Add the button to the sidebar using pack layout
                 button.pack()
 
     def show_content(self, label):
         """Clear previous content and display appropriate content based on the label."""
+        # Clear any existing content from the main frame to prepare for new content
         self.clear_main_frame()
 
+        # Dictionary mapping button labels to the respective function that handles the content
         content_functions = {
-            "Add Member": self.show_add_member,
-            "View Member Details": self.show_member_details,
-            "Gym Accounts": self.show_gym_accounts,
+            "Add Member": self.show_add_member,  # Function to show the "Add Member" screen
+            "View Member Details": self.show_member_details,  # Function to show member details
+            "Gym Accounts": self.show_gym_accounts,  # Function to show gym accounts
         }
 
+        # If the label matches a key in content_functions, call the associated function
         if label in content_functions:
             content_functions[label]()
 
+        # Display a back button to allow the user to navigate back or cancel the current view
         self.back_button()
 
     def clear_main_frame(self):
-        """Function to clear the main frame before loading new content"""
+        """Function to clear the main frame before loading new content."""
+        # Iterate through all child widgets of the background image
         for widget in self.background_image.winfo_children():
-            widget.destroy()
+            widget.destroy()  # Destroy each widget to remove it from the display
 
     def back_button(self):
+        """Creates and displays a back button to navigate to the previous menu."""
+        # Create a 'Back' button with specified properties
         back_button = tk.Button(
-            self.background_image,
-            text="Back",
-            font=("Segoe UI", 12, "bold"),
-            command=self.recreate_sidebar,
+            self.background_image,  # Parent widget where the button will be placed
+            text="Back",  # Text displayed on the button
+            font=("Segoe UI", 12, "bold"),  # Font style and size for the button text
+            command=self.recreate_sidebar,  # Command to execute when the button is clicked
         )
+
+        # Pack the button into the layout with padding and alignment settings
         back_button.pack(padx=10, pady=10, side="bottom", anchor="e", ipadx=20)
 
     def recreate_sidebar(self):
         """Recreate the sidebar and restore the initial layout."""
-        for widget in self.root.winfo_children():
-            widget.destroy()
-        self.setup_ui()
+        # Clear the main frame to remove any existing content
+        self.clear_main_frame()
+
+        # Create the buttons in the sidebar to restore the initial layout
+        self.create_buttons()
 
     def show_add_member(self):
-        """Placeholder for Add Member."""
-        tk.Label(
-            self.background_image, text="Add Member", font=("Segoe UI", 20, "bold")
-        ).pack(pady=20)
+        """Display the Add Member interface."""
+        # Define colors and fonts for consistency
+        BG_COLOR = "blue"
+        BUTTON_BG_COLOR = "Forest Green"
+        BUTTON_FG_COLOR = "white"
+        ERROR_BG_COLOR = "#f2003c"
+        self.FONT_LARGE = ("Segoe UI", 20, "bold")
+        FONT_MEDIUM = ("Segoe UI", 16)
+        FONT_SMALL = ("Segoe UI", 12, "bold")
+        
+        # Title label
+        tk.Label(self.background_image, text="Add Member", font=self.FONT_LARGE).pack(pady=20)
 
+        # Frame for member details
         add_member_frame = tk.Frame(self.background_image, bd=2, relief=tk.SOLID)
         add_member_frame.pack()
 
@@ -259,134 +328,140 @@ class GymManagerApp:
             "Phone Number:",
             "Membership Duration (months):",
             "Membership Fees (Rs):",
-            "Payment Method :",
-            "Address:",
+            "Payment Method:"
         ]
 
+        # Create labels for each field
         for i, text in enumerate(labels):
-            tk.Label(add_member_frame, font=("Segoe UI", 14, "bold"), text=text).grid(
-                row=i, column=0, pady=5, padx=5, sticky=tk.E
+            tk.Label(add_member_frame, font=FONT_MEDIUM, text=text).grid(
+                row=i, column=0, pady=10, sticky=tk.E
             )
 
+        # Input validation commands
         vcmd_text = (add_member_frame.register(self.validate_input), "%P", "letters")
         vcmd_numeric = (add_member_frame.register(self.validate_input), "%P", "numeric")
 
+        # Name Entry
         self.entry_name = tk.Entry(
             add_member_frame,
             width=25,
-            font=("Segoe UI", 16),
+            font=FONT_MEDIUM,
             validate="key",
             validatecommand=vcmd_text,
         )
-        self.entry_name.grid(row=0, column=1, pady=20, padx=5)
+        self.entry_name.grid(row=0,padx=(0,20), column=1)
 
+        # Age Dropdown
         age_options = [str(i) for i in range(1, 101)]
         self.age_choice = tk.StringVar(add_member_frame)
         self.age_choice.set("Select Age")
         age_menu = tk.OptionMenu(add_member_frame, self.age_choice, *age_options)
-        age_menu.grid(row=1, column=1, pady=5, padx=5)
-        age_menu.config(bg="Blue", fg="white", font=("Segoe UI", 10, "bold"))
+        age_menu.grid(row=1, column=1, sticky=tk.W)
+        age_menu.config(bg=BG_COLOR, fg="white", font=FONT_SMALL)
 
+        # Gender Dropdown
         self.gender = tk.StringVar(add_member_frame)
         self.gender.set("Select")
         gender_menu = tk.OptionMenu(add_member_frame, self.gender, "Male", "Female")
-        gender_menu.grid(row=2, column=1, pady=5, padx=5)
-        gender_menu.config(bg="Blue", fg="white", font=("Segoe UI", 10, "bold"))
+        gender_menu.grid(row=2, column=1, sticky=tk.W)
+        gender_menu.config(bg=BG_COLOR, fg="white", font=FONT_SMALL)
 
+        # Phone Number Entry
         self.entry_number = tk.Entry(
             add_member_frame,
             width=25,
-            font=("Segoe UI", 16),
+            font=FONT_MEDIUM,
             validate="key",
             validatecommand=vcmd_numeric,
         )
-        self.entry_number.grid(row=3, column=1, pady=5, padx=5)
+        self.entry_number.grid(row=3, column=1)
 
+        # Duration Dropdown
         duration_options = [f"{i} months" for i in range(1, 13)]
         self.duration_choice = tk.StringVar(add_member_frame)
         self.duration_choice.set("Select")
-        duration_menu = tk.OptionMenu(
-            add_member_frame, self.duration_choice, *duration_options
-        )
-        duration_menu.grid(row=4, column=1, pady=5, padx=5)
-        duration_menu.config(bg="Blue", fg="white", font=("Segoe UI", 10, "bold"))
+        duration_menu = tk.OptionMenu(add_member_frame, self.duration_choice, *duration_options)
+        duration_menu.grid(row=4, column=1, sticky=tk.W)
+        duration_menu.config(bg=BG_COLOR, fg="white", font=FONT_SMALL)
 
+        # Fees Entry
         self.entry_fees = tk.Entry(
             add_member_frame,
-            font=("Segoe UI", 16),
+            width=15,
+            font=FONT_MEDIUM,
             validate="key",
             validatecommand=vcmd_numeric,
         )
-        self.entry_fees.grid(row=5, column=1, pady=5, padx=5)
+        self.entry_fees.grid(row=5, column=1, sticky=tk.W)
 
+        # Payment Method Dropdown
         self.payment_method = tk.StringVar(add_member_frame)
         self.payment_method.set("Select")
-        payment_menu = tk.OptionMenu(
-            add_member_frame, self.payment_method, "Online", "Cash"
-        )
-        payment_menu.grid(row=6, column=1, pady=5, padx=5)
-        payment_menu.config(bg="Blue", fg="white", font=("Segoe UI", 10, "bold"))
+        payment_menu = tk.OptionMenu(add_member_frame, self.payment_method, "Online", "Cash")
+        payment_menu.grid(row=6, column=1, sticky=tk.W )
+        payment_menu.config(bg=BG_COLOR, fg="white", font=FONT_SMALL)
 
-        self.entry_address = tk.Text(
-            add_member_frame, height=4, width=30, font=("Segoe UI", 14)
-        )
-        self.entry_address.grid(row=7, column=1, pady=5, padx=10)
-        self.entry_address.bind("<Key>", self.validate_text_input)
-
+        # Button Frame
         buttons_frame = tk.Frame(add_member_frame)
-        buttons_frame.grid(row=8, column=0, columnspan=2, pady=15, padx=5)
+        buttons_frame.grid(row=8, column=0, columnspan=2)
 
+        # Register Button
         tk.Button(
             buttons_frame,
             text="Register",
             command=self.register_member,
             font=("Segoe UI", 12, "bold"),
-            bg="Forest Green",
-            fg="white",
+            bg=BUTTON_BG_COLOR,
+            fg=BUTTON_FG_COLOR,
         ).grid(row=0, column=0, ipadx=10, padx=5)
+
+        # Reset Button
         tk.Button(
             buttons_frame,
             text="Reset",
             command=self.reset_form,
             font=("Segoe UI", 12, "bold"),
-            bg="#f2003c",
-            fg="white",
+            bg=ERROR_BG_COLOR,
+            fg=BUTTON_FG_COLOR,
         ).grid(row=0, column=1, ipadx=10, padx=5)
 
     def reset_form(self):
         """Reset the form fields to their default state."""
+        # Clear the entry for the member's name
         self.entry_name.delete(0, tk.END)
+        
+        # Reset age dropdown to default selection
         self.age_choice.set("Select Age")
+        
+        # Reset gender dropdown to default selection
         self.gender.set("Select")
+        
+        # Clear the entry for the phone number
         self.entry_number.delete(0, tk.END)
-        self.entry_address.delete("1.0", tk.END)
+        
+        # Reset duration dropdown to default selection
         self.duration_choice.set("Select")
+        
+        # Clear the entry for membership fees
         self.entry_fees.delete(0, tk.END)
+        
+        # Reset payment method dropdown to default selection
         self.payment_method.set("Select")
 
     def validate_input(self, input_str, mode):
         """Validates input based on the type specified."""
+        # If the mode is 'numeric', check if input is a number or empty
         if mode == "numeric":
             return input_str.isdigit() or input_str == ""
+        
+        # If the mode is 'letters', check if all characters are alphabetic or spaces
         elif mode == "letters":
             return all(char.isalpha() or char.isspace() for char in input_str)
+        
+        # Return False for any other mode
         else:
             return False
 
-    def validate_text_input(self, event):
-        """Limits the text input to letters, numbers, spaces, backspace, dots, hyphens, commas, and equals signs."""
-        allowed_chars = (
-            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .,-="
-        )
-
-        input_str = event.char
-
-        if input_str == "\b":
-            return True
-        elif input_str in allowed_chars:
-            return True
-        else:
-            return "break"
 
     def register_member(self):
         """Registers a new member into the database with the provided details from the form."""
@@ -695,7 +770,7 @@ class GymManagerApp:
 
         for i, text in enumerate(labels_text):
             tk.Label(add_member_frame, font=("Segoe UI", 12, "bold"), text=text).grid(
-                row=i, column=0, pady=5, padx=5, sticky=tk.E
+                row=i, column=0, , sticky=tk.E
             )
 
         vcmd_text = (add_member_frame.register(self.validate_input), "%P", "letters")
@@ -723,18 +798,18 @@ class GymManagerApp:
         entries = [self.entry_name, self.entry_number, self.entry_fees]
 
         for i, entry in enumerate(entries):
-            entry.grid(row=i, column=1, pady=5, padx=5)
+            entry.grid(row=i, column=1, )
 
         age_options = [str(i) for i in range(1, 101)]
         self.age_choice = tk.StringVar(value="Select Age")
         age_menu = tk.OptionMenu(add_member_frame, self.age_choice, *age_options)
-        age_menu.grid(row=3, column=1, pady=5, padx=5)
+        age_menu.grid(row=3, column=1, )
         age_menu.config(bg="Blue", fg="white", font=("Segoe UI", 10, "bold"))
 
         self.gender = tk.StringVar(value="Select")
         gender_menu = tk.OptionMenu(add_member_frame, self.gender, "Male", "Female")
         gender_menu.config(bg="Blue", fg="white", font=("Segoe UI", 10, "bold"))
-        gender_menu.grid(row=4, column=1, pady=5, padx=5)
+        gender_menu.grid(row=4, column=1, )
 
         duration_options = [f"{i} months" for i in range(1, 13)]
         self.duration_choice = tk.StringVar(value="Select")
@@ -742,21 +817,21 @@ class GymManagerApp:
             add_member_frame, self.duration_choice, *duration_options
         )
         duration_menu.config(bg="Blue", fg="white", font=("Segoe UI", 10, "bold"))
-        duration_menu.grid(row=5, column=1, pady=5, padx=5)
+        duration_menu.grid(row=5, column=1, )
 
         self.status_choice = tk.StringVar(value="Select")
         status_menu = tk.OptionMenu(
             add_member_frame, self.status_choice, "Active", "Inactive"
         )
         status_menu.config(bg="blue", fg="white", font=("Segoe UI", 10, "bold"))
-        status_menu.grid(row=6, column=1, pady=5, padx=5)
+        status_menu.grid(row=6, column=1, )
 
         self.payment_method = tk.StringVar(value="Select")
         payment_menu = tk.OptionMenu(
             add_member_frame, self.payment_method, "Online", "Cash"
         )
         payment_menu.config(bg="blue", fg="white", font=("Segoe UI", 10, "bold"))
-        payment_menu.grid(row=7, column=1, pady=5, padx=5)
+        payment_menu.grid(row=7, column=1, )
 
         self.one_month_back = date.today() - timedelta(days=30)
         self.date_of_activation_entry = DateEntry(
@@ -769,14 +844,8 @@ class GymManagerApp:
             date_pattern="yyyy-MM-dd",
             mindate=self.one_month_back,
         )
-        self.date_of_activation_entry.grid(row=8, column=1, pady=5, padx=5)
+        self.date_of_activation_entry.grid(row=8, column=1, )
         self.date_of_activation_entry.bind("<KeyPress>", self.disable_key_input)
-
-        self.entry_address = tk.Text(
-            add_member_frame, height=3, width=30, font=("Segoe UI", 14)
-        )
-        self.entry_address.grid(row=9, column=1, pady=5, padx=10)
-        self.entry_address.bind("<Key>", self.validate_text_input)
 
         buttons_frame = tk.Frame(add_member_frame)
         buttons_frame.grid(row=10, column=0, columnspan=2, pady=15, padx=5)
@@ -1227,7 +1296,7 @@ class GymManagerApp:
 
         for i, text in enumerate(labels_text):
             tk.Label(add_member_frame, font=("Segoe UI", 10, "bold"), text=text).grid(
-                row=i, column=0, pady=5, padx=5, sticky=tk.E
+                row=i, column=0, , sticky=tk.E
             )
 
         vcmd_numeric = (add_member_frame.register(self.validate_input), "%P", "numeric")
@@ -1254,14 +1323,14 @@ class GymManagerApp:
 
         entries = [self.entry_name, self.entry_number, self.entry_fees]
         for i, entry in enumerate(entries):
-            entry.grid(row=i, column=1, pady=5, padx=5)
+            entry.grid(row=i, column=1, )
 
         self.status_choice = tk.StringVar(value="Select")
         status_menu = tk.OptionMenu(
             add_member_frame, self.status_choice, "Active", "Inactive"
         )
         status_menu.config(bg="blue", fg="white", font=("Segoe UI", 10, "bold"))
-        status_menu.grid(row=3, column=1, pady=5, padx=5)
+        status_menu.grid(row=3, column=1, )
 
         duration_options = [f"{i} months" for i in range(1, 13)]
         self.duration_choice = tk.StringVar(value="Select")
@@ -1269,7 +1338,7 @@ class GymManagerApp:
             add_member_frame, self.duration_choice, *duration_options
         )
         duration_menu.config(bg="Blue", fg="white", font=("Segoe UI", 10, "bold"))
-        duration_menu.grid(row=4, column=1, pady=5, padx=5)
+        duration_menu.grid(row=4, column=1, )
 
         self.date_of_activation_entry = DateEntry(
             add_member_frame,
@@ -1281,7 +1350,7 @@ class GymManagerApp:
             date_pattern="yyyy-MM-dd",
             mindate=self.one_month_back,
         )
-        self.date_of_activation_entry.grid(row=5, column=1, pady=5, padx=5)
+        self.date_of_activation_entry.grid(row=5, column=1, )
         self.date_of_activation_entry.bind("<KeyPress>", self.disable_key_input)
 
         self.update_date_entry_state()
@@ -1350,9 +1419,7 @@ class GymManagerApp:
                 )
 
             self.member_window.destroy()
-            self.clear_main_frame()
-            self.show_gym_accounts()
-            self.back_button()
+            self.show_content("Gym Accounts")
             messagebox.showinfo("Success", "Member activated successfully.")
 
         except Exception as e:
@@ -1386,12 +1453,20 @@ class GymManagerApp:
     def send_whatsapp_message(self):
         """Send WhatsApp messages to a list of users if logged in."""
         self.message_count = self.load_message_count()
-        self.license_valid = self.load_license_key()
+        self.license_valid, expiration_date = self.load_license_key_status()
 
-        if self.message_count >= 20 and not self.license_valid:
+        if self.message_count >= 20:
             messagebox.showwarning(
                 "License Required",
-                "You have reached the free limit of 20 messages. Please enter a valid license key to continue.",
+                "You've reached your free limit of 20 messages. To continue enjoying our services without interruption, please enter a valid license key.",
+            )
+            self.create_license_key_interface()
+            return
+
+        if not self.license_valid and expiration_date is not None:
+            messagebox.showwarning(
+                "License Required",
+                f"Your license key has expired on {expiration_date}. To restore full functionality, please enter a valid license key to continue using our services.",
             )
             self.create_license_key_interface()
             return
@@ -1457,29 +1532,32 @@ class GymManagerApp:
             messagebox.showerror("Database Error", f"Error loading message count: {e}")
             return 0
 
-    def load_license_key(self):
-        """Load the license key from the app_data table and check its validity."""
+    def load_license_key_status(self):
+        """Load the license key expiration date from the app_data table and check its validity."""
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute(
-                    "SELECT license_key FROM app_data ORDER BY id DESC LIMIT 1"
+                    "SELECT license_key_expiration FROM app_data ORDER BY id DESC LIMIT 1"
                 )
                 result = cursor.fetchone()
 
-            license_key = result[0]
+            expiration_date_str = result[0] if result else None
 
-            if license_key is not None:
-                self.license_valid = self.check_license_key(license_key)
-            else:
-                self.license_valid = False
+            if expiration_date_str is None:
+                return False, None
+
+            expiration_date = datetime.strptime(expiration_date_str, "%Y-%m-%d").date()
+
+            is_valid = datetime.now().date() <= expiration_date
+            return is_valid, expiration_date
 
         except sqlite3.Error as e:
             messagebox.showerror("Database Error", f"Error loading license key: {e}")
-            self.license_valid = False
+            return False, None
 
-    def save_app_data(self, message_count=None, license_key=None):
-        """Save the message count and license key to the app_data table."""
+    def save_app_data(self, message_count=None, license_key_expiration=None):
+        """Save the message count and license_key_expiration to the app_data table."""
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
@@ -1492,18 +1570,18 @@ class GymManagerApp:
                         """
                         UPDATE app_data
                         SET message_count = COALESCE(?, message_count),
-                            license_key = COALESCE(?, license_key)
+                            license_key_expiration  = COALESCE(?, license_key_expiration)
                         WHERE id = ?
                         """,
-                        (message_count, license_key, exists[0]),
+                        (message_count, license_key_expiration, exists[0]),
                     )
                 else:
                     cursor.execute(
                         """
-                        INSERT INTO app_data (message_count, license_key)
+                        INSERT INTO app_data (message_count, license_key_expiration)
                         VALUES (?, ?)
                         """,
-                        (message_count, license_key),
+                        (message_count, license_key_expiration),
                     )
 
                 conn.commit()
@@ -1557,19 +1635,15 @@ class GymManagerApp:
         )
         validate_button.pack(side="left")
 
-        back_button = tk.Button(
+        Cancel_button = tk.Button(
             buttons_frame,
             text="Cancel",
             font=("Arial", 13, "bold"),
             bg="red",
             fg="white",
-            command=lambda: (
-                self.clear_main_frame(),
-                self.show_gym_accounts(),
-                self.back_button(),
-            ),
+            command=lambda: self.show_content("Gym Accounts"),
         )
-        back_button.pack(side="right", padx=20)
+        Cancel_button.pack(side="right", padx=20)
 
     def process_license_key(self, event):
         """Validate and format the license key with '-' after every 4 characters, allowing only alphanumeric characters."""
@@ -1590,10 +1664,12 @@ class GymManagerApp:
 
     def check_license_key(self, license_key):
         """Check the license key and its expiration date against a file hosted on GitHub."""
-        if license_key == "":
+        if not license_key:
             messagebox.showerror("Error", "License key cannot be empty.")
             return
-        elif len(license_key.replace("-", "")) < 16:
+
+        cleaned_license_key = license_key.replace("-", "").strip()
+        if len(cleaned_license_key) != 16:
             messagebox.showerror("Error", "License key must be 16 characters long.")
             return
 
@@ -1602,48 +1678,48 @@ class GymManagerApp:
         try:
             response = requests.get(url)
             response.raise_for_status()
-
             df = pd.read_csv(StringIO(response.text))
 
             required_columns = {"License Key", "Expiration Date"}
             if not required_columns.issubset(df.columns):
-                return False
+                messagebox.showerror(
+                    "Error",
+                    "It seems some required information is missing from the license data. Please reach out to support for assistance to resolve this issue.",
+                )
+                return
 
             matching_license = df[df["License Key"].str.strip() == license_key.strip()]
 
             if matching_license.empty:
                 messagebox.showerror(
-                    "License Key Not Found", f"License key '{license_key}' not found."
+                    "License Key Not Found",
+                    f"Oops! The license key '{license_key}' you entered was not found in our records. Please double-check and try again or contact support if you need assistance.",
                 )
-                return False
+                return
 
             expiration_date_str = matching_license.iloc[0]["Expiration Date"].strip()
             expiration_date = datetime.strptime(expiration_date_str, "%Y-%m-%d").date()
 
             current_date = datetime.now().date()
-
             if current_date <= expiration_date:
                 messagebox.showinfo(
                     "License Key Valid",
-                    f"License key '{license_key}' is valid until {expiration_date}.",
+                    f"Congratulations! Your license key '{license_key}' is valid until {expiration_date}. You can now send WhatsApp messages seamlessly!",
                 )
-                return True
+                self.save_app_data(license_key_expiration=expiration_date)
+                self.show_content("Gym Accounts")
             else:
                 messagebox.showerror(
                     "License Key Expired",
-                    f"License key '{license_key}' expired on {expiration_date}.",
+                    f"Unfortunately, your license key '{license_key}' expired on {expiration_date}. Please renew your license to continue using the service.",
                 )
-                return False
 
         except requests.exceptions.RequestException as e:
             messagebox.showerror(
                 "Error", f"Failed to fetch the license file from GitHub: {e}"
             )
-            return False
-
         except Exception as e:
             messagebox.showerror("Error", f"An unexpected error occurred: {e}")
-            return False
 
     def process_row_and_send_message(self, row):
         """Process each row of data and send a message."""
