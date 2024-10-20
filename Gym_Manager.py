@@ -69,12 +69,12 @@ class GymManagerApp:
 
         cursor.execute(
             """
-        CREATE TABLE IF NOT EXISTS app_data (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            message_count INTEGER DEFAULT 0,
-            license_key TEXT
-        )
-    """
+            CREATE TABLE IF NOT EXISTS app_data (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                message_count INTEGER DEFAULT 0,
+                license_key TEXT DEFAULT 'LVHZ-7169-ZRXT-6652'
+            )
+            """
         )
         conn.commit()
         conn.close()

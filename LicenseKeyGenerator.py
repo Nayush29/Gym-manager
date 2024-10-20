@@ -36,6 +36,7 @@ class LicenseKeyGenerator:
 
         self.expiration_entry = tk.Entry(self.root, font=("Arial", 14))
         self.expiration_entry.pack(pady=5)
+        self.expiration_entry.focus()
 
         self.output_label = tk.Label(self.root, text="", font=("Arial", 12))
         self.output_label.pack(pady=10)
