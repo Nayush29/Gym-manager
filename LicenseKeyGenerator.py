@@ -14,11 +14,9 @@ class LicenseKeyGenerator:
         r"C:\Users\mayan\OneDrive\Documents\VS\Python Scripts\Gym Manager"
     )
 
-    # Constants for messages
     INPUT_ERROR = (
         "Please enter a valid positive number for the expiration duration in months."
     )
-    UNEXPECTED_ERROR = "An unexpected error occurred:\n{}"
 
     def __init__(self, root):
         self.root = root
@@ -30,22 +28,18 @@ class LicenseKeyGenerator:
 
     def _setup_ui(self):
         """Setup the user interface components."""
-        # Expiration label
         tk.Label(
             self.root,
             text="Enter expiration duration in months.",
             font=("Arial", 12, "bold"),
         ).pack(pady=10)
 
-        # Expiration entry
         self.expiration_entry = tk.Entry(self.root, font=("Arial", 14))
         self.expiration_entry.pack(pady=5)
 
-        # Output label
         self.output_label = tk.Label(self.root, text="", font=("Arial", 12))
         self.output_label.pack(pady=10)
 
-        # Generate button
         self.generate_button = tk.Button(
             self.root,
             text="Generate Key",
@@ -73,7 +67,6 @@ class LicenseKeyGenerator:
         csv_file_path = os.path.join(self.GITHUB_REPO_PATH, self.CSV_FILE_NAME)
 
         try:
-            # Check if the file exists to decide whether to write headers
             file_exists = os.path.isfile(csv_file_path)
 
             with open(csv_file_path, mode="a", newline="") as file:
@@ -99,44 +92,34 @@ class LicenseKeyGenerator:
     def generate_key(self):
         """Generate a key and perform all operations."""
         self.output_label.config(text="Generating key... Please wait.")
-        self.generate_button.config(
-            state="disabled"
-        )  # Disable the button during processing
+        self.generate_button.config(state="disabled")
 
         try:
-            # Validate input
             months = self.validate_input(self.expiration_entry.get())
 
-            # Generate the license key
             license_key = self.generate_license_key()
 
-            # Save the license key to CSV
             self.save_key_to_csv(license_key, months)
             self.output_label.config(text="Key generated and saved successfully.")
 
-            # Commit and push to GitHub
             self.git_commit_and_push()
 
-            # Show the generated key in a messagebox
             messagebox.showinfo(
                 "Generated Key",
                 f"License Key: {license_key}\nExpiration: {months} month{'s' if months > 1 else ''}",
             )
 
-            # Close the window after successful generation and saving
             self.root.quit()
 
         except ValueError:
             messagebox.showerror("Input Error", self.INPUT_ERROR)
             self.output_label.config(text="")
-            self.generate_button.config(
-                state="normal"
-            )  # Re-enable the button if there's an error
+            self.generate_button.config(state="normal")
 
         except Exception as e:
-            messagebox.showerror("Error", self.UNEXPECTED_ERROR.format(str(e)))
+            messagebox.showerror("Error", f"An unexpected error occurred: {str(e)}")
             self.output_label.config(text="")
-            self.generate_button.config(state="normal")  # Re-enable the button if error
+            self.generate_button.config(state="normal")
 
     def validate_input(self, input_value):
         """Validate the input and return the number of months."""
