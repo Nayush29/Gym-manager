@@ -134,7 +134,6 @@ class GymManagerApp:
         self.sidebar_frame = tk.Frame(self.background_image)
         self.sidebar_frame.pack(padx=30, side=tk.LEFT)
 
-        self.create_license_key_interface()
         self.create_buttons()
 
     def load_image_path(self):
@@ -215,6 +214,7 @@ class GymManagerApp:
 
     def process_license_key(self, event):
         """Validate and format the license key with '-' after every 4 characters, allowing only alphanumeric characters."""
+
         value = self.license_entry.get().upper()
 
         allowed_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
