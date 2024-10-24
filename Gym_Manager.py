@@ -96,9 +96,7 @@ class GymManagerApp:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             current_date = datetime.now().date()
-            cursor.execute(
-                "SELECT id, duration, date_of_activation FROM members WHERE status = 'Active'"
-            )
+            cursor.execute("SELECT id, duration, date_of_activation FROM members WHERE status = 'Active'")
             rows = cursor.fetchall()
             updates = []
 
