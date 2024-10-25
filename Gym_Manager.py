@@ -97,6 +97,18 @@ class GymManagerApp:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             current_date = datetime.now().date()
+
+            cursor.execute("SELECT license_key_expiration, message_count FROM app_data")
+            app_data = cursor.fetchone()
+
+            if app_data:
+                license_key_expiration_str, message_count = app_data
+                if license_key_expiration_str and message_count > 20:
+                    license_key_expiration = datetime.strptime(license_key_expiration_str, "%Y-%m-%d").date()
+                    
+                    if current_date > license_key_expiration:
+                        cursor.execute("UPDATE app_data SET message_count = 0")
+
             cursor.execute("SELECT id, duration, date_of_activation FROM members WHERE status = 'Active'")
             rows = cursor.fetchall()
             updates = []
@@ -3398,7 +3410,7 @@ class GymManagerApp:
         """Create and add buttons to the sidebar."""
         self.sidebar_frame = tk.Frame(self.background_image, bg=self.FG_COLOR,
         highlightbackground="#FFD700", highlightthickness= 4)
-        self.sidebar_frame.pack(side="left", padx=150)
+        self.sidebar_frame.pack(side=tk.LEFT, padx=150)
 
         button_data = ["Add Member", "View Member Details", "Gym Accounts", "Exit"]
         
@@ -3449,7 +3461,7 @@ class GymManagerApp:
 
         back_button = tk.Button(
             top_frame,
-            text="Back",
+            text="⬅️ Back",  
             font=self.FONT_SMALL,
             fg=self.FG_COLOR,
             bg="#6C757D",
@@ -3460,7 +3472,7 @@ class GymManagerApp:
         back_button.bind("<Leave>", lambda event: self.on_hover(event, is_enter=False))
 
         label_widget = tk.Label(top_frame, text=label, font=self.FONT_LARGE, bg="#2B3A6B", fg=self.FG_COLOR)
-        label_widget.grid(row=0, column=1, pady=5, padx=(0,40), sticky="ew")
+        label_widget.grid(row=0, column=1, pady=5, padx=(0,70), sticky="ew")
 
         top_frame.grid_columnconfigure(1, weight=1)
 
@@ -3475,16 +3487,16 @@ class GymManagerApp:
 
         color_mapping = {
             "Exit": "#C70039",
-            "Back": "#6C757D",
-            "Register": self.GREEN_BG_COLOR,
-            "Reset": self.RED_BG_COLOR,
-            "Update": self.GREEN_BG_COLOR,
-            "Delete": self.RED_BG_COLOR,
-            "Submit": self.GREEN_BG_COLOR,
-            "Alert" : self.RED_BG_COLOR,
-            "Validate": self.BLUE_BG_COLOUR,
-            "Cancel": self.RED_BG_COLOR,
-            "View Members": self.BG_COLOR}
+            "⬅️ Back": "#6C757D",
+            "✅ Register": self.GREEN_BG_COLOR,
+            "⏳ Reset": self.RED_BG_COLOR,
+            "⬆️ Update": self.GREEN_BG_COLOR,
+            "✂️ Delete": self.RED_BG_COLOR,
+            "✅ Submit": self.GREEN_BG_COLOR,
+            "⚠️ Alert" : self.RED_BG_COLOR,
+            "🚀 Validate": self.BLUE_BG_COLOUR,
+            "🚫 Cancel": self.RED_BG_COLOR,
+            "🔗 View Members": self.BG_COLOR}
 
         base_color = color_mapping.get(label, "#2B3A6B")
 
@@ -3579,7 +3591,7 @@ class GymManagerApp:
 
         register_button = tk.Button(
             buttons_frame,
-            text="Register",
+            text="✅ Register",
             command=self.register_member,
             font=self.FONT_SMALL,
             bg=self.GREEN_BG_COLOR,
@@ -3588,7 +3600,7 @@ class GymManagerApp:
 
         reset_button = tk.Button(
             buttons_frame,
-            text="Reset",
+            text="⏳ Reset",
             command=self.reset_form,
             font=self.FONT_SMALL,
             bg=self.RED_BG_COLOR,
@@ -3761,7 +3773,7 @@ class GymManagerApp:
             bg=self.GREEN_BG_COLOR,
             fg=self.FG_COLOR,
             font=self.FONT_SMALL,
-            text="Update",
+            text="⬆️ Update",
             command=self.update_record)
         update_button.pack(side=tk.LEFT, padx=20, ipadx=self.button_pading)
 
@@ -3770,7 +3782,7 @@ class GymManagerApp:
             bg=self.RED_BG_COLOR,
             fg=self.FG_COLOR,
             font=self.FONT_SMALL,
-            text="Delete",
+            text="✂️ Delete",
             command=self.delete_record)
         delete_button.pack(side=tk.RIGHT, ipadx=self.button_pading)
 
@@ -3931,7 +3943,7 @@ class GymManagerApp:
 
         submit_button = tk.Button(
             self.member_window,
-            text="Submit",
+            text="✅ Submit",
             command=submit_command,
             font=self.FONT_SMALL,
             bg=self.GREEN_BG_COLOR,
@@ -4089,7 +4101,7 @@ class GymManagerApp:
 
         view_month_button = tk.Button(
             section_frame,
-            text="View Members",
+            text="🔗 View Members",
             font=self.FONT_SMALL,
             bg=self.BG_COLOR,
             fg=self.FG_COLOR,
@@ -4163,14 +4175,14 @@ class GymManagerApp:
         total_members, total_fees = new_member_data
         total_label = tk.Label(
             section_frame,
-            text=f"Members Added: {total_members}",
+            text=f"Members Added: {total_members} ➕",
             fg="#388E3C",
             font=self.FONT_MEDIUM_Table)
         total_label.grid(row=1, column=0, padx=10, pady=10)
 
         Total_fees_label = tk.Label(
             section_frame,
-            text=f"Total Fees: Rs {total_fees}",
+            text=f"Total Fees: Rs {total_fees} ⚡",
             fg="#FFB300",
             font=self.FONT_MEDIUM_Table)
         Total_fees_label.grid(row=2, column=0, padx=10, pady=10)
@@ -4178,14 +4190,14 @@ class GymManagerApp:
         if "Members details for Current Month." in title:
             active_label = tk.Label(
                 section_frame,
-                text=f"Active Members Till Now: {active_data}",
+                text=f"Active Members Till Now: {active_data} ☑️",
                 fg="#1976D2",
                 font=self.FONT_MEDIUM_Table)
             active_label.grid(row=3, column=0, padx=10, pady=10)
 
             inactive_label = tk.Label(
                 section_frame,
-                text=f"Inactive Members: {inactive_data}",
+                text=f"Inactive Members: {inactive_data} ❎",
                 fg="#D32F2F",
                 font=self.FONT_MEDIUM_Table)
             inactive_label.grid(row=4, column=0, padx=10, pady=10)
@@ -4195,8 +4207,37 @@ class GymManagerApp:
         inner_frame = tk.Frame(self.Notification_frame)
         inner_frame.pack(fill=tk.BOTH, expand=True)
 
-        label = tk.Label(inner_frame,text="Inactive Members Details",font=self.FONT_MEDIUM)
-        label.pack(pady=10)
+        self.expiration_month = datetime.now().strftime("%Y-%m")
+
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                SELECT 
+                    SUM(CASE WHEN notified = 'True' THEN 1 ELSE 0 END) AS true_count,
+                    SUM(CASE WHEN notified = 'False' THEN 1 ELSE 0 END) AS false_count
+                FROM members 
+                WHERE status = 'Inactive' 
+                AND strftime('%Y-%m', expiration_date) = ? """, (self.expiration_month,))
+
+            true_count, false_count = cursor.fetchone()
+            conn.close()
+
+        except sqlite3.Error as e:
+            messagebox.showerror("Database Error", f"An error occurred: {str(e)}")
+
+        top_frame = tk.Frame(inner_frame)
+        top_frame.pack(fill=tk.X, padx=20, pady=10)
+
+        title_label = tk.Label(top_frame, text="Inactive Members Details", font=self.FONT_MEDIUM)
+        title_label.pack(anchor=tk.CENTER)
+
+        notified_label = tk.Label(top_frame, text=f"Notified: {true_count} ✅", font=self.FONT_SMALL, fg="#76FF03")
+        notified_label.pack(side=tk.RIGHT, padx=(10, 0))
+
+        not_notified_label = tk.Label(top_frame, text=f"Unnotified: {false_count} ❎", font=self.FONT_SMALL, fg="#00B0FF")
+        not_notified_label.pack(side=tk.RIGHT)
 
         self.tree = ttk.Treeview(
             inner_frame,
@@ -4221,8 +4262,6 @@ class GymManagerApp:
         self.tree.column("duration", width=50, anchor="center")
         self.tree.column("Inactivation_date", width=120, anchor="center")
 
-        self.expiration_month = datetime.now().strftime("%Y-%m")
-
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
@@ -4246,32 +4285,32 @@ class GymManagerApp:
         self.tree.pack(padx=(15, 0), fill=tk.BOTH, expand=True)
 
         base_frame = tk.Frame(self.Notification_frame)
-        base_frame.pack(side=tk.BOTTOM, pady=10)
-
-        update_button = tk.Button(
-            base_frame,
-            bg=self.GREEN_BG_COLOR,
-            fg=self.FG_COLOR,
-            font=self.FONT_SMALL,
-            text="Update",
-            command=self.update_inactive,
-        )
-        update_button.pack(side=tk.LEFT, padx=20, ipadx=self.button_pading)
+        base_frame.pack(pady=10, anchor=tk.CENTER)
 
         alert_button = tk.Button(
             base_frame,
             bg=self.RED_BG_COLOR,
             fg=self.FG_COLOR,
             font=self.FONT_SMALL,
-            text="Alert",
+            text="⚠️ Alert",
             command=self.send_whatsapp_message,
         )
-        alert_button.pack(side=tk.RIGHT, ipadx=self.button_pading)
+        alert_button.pack(side=tk.LEFT, ipadx=self.button_pading)
 
-        update_button.bind("<Enter>", lambda event: self.on_hover(event, is_enter=True))
-        update_button.bind("<Leave>", lambda event: self.on_hover(event, is_enter=False))
+        update_button = tk.Button(
+            base_frame,
+            bg=self.GREEN_BG_COLOR,
+            fg=self.FG_COLOR,
+            font=self.FONT_SMALL,
+            text="⬆️ Update",
+            command=self.update_inactive,
+        )
+        update_button.pack(side=tk.RIGHT, padx=20, ipadx=self.button_pading)
+
         alert_button.bind("<Enter>", lambda event: self.on_hover(event, is_enter=True))
         alert_button.bind("<Leave>", lambda event: self.on_hover(event, is_enter=False))
+        update_button.bind("<Enter>", lambda event: self.on_hover(event, is_enter=True))
+        update_button.bind("<Leave>", lambda event: self.on_hover(event, is_enter=False))
 
         self.tree.bind("<Double-1>", self.on_click)
 
@@ -4385,7 +4424,7 @@ class GymManagerApp:
 
         submit_button = tk.Button(
             self.member_window,
-            text="Submit",
+            text="✅ Submit",
             command=submit_command,
             font=self.FONT_SMALL,
             bg=self.GREEN_BG_COLOR,
@@ -4458,7 +4497,8 @@ class GymManagerApp:
             if not self.license_valid and self.message_count >= 20:
 
                 if expiration_date is not None:
-                    message = (f"You cannot send more messages as you've reached your free limit of 20 messages and your license key has expired on {expiration_date}.\nTo restore full functionality, please enter a valid license key to continue using our services.")
+                    message = (
+                        f"You have reached your limit of 20 free messages and your license key expired on {expiration_date}.\nTo restore full functionality, please enter a valid license key to continue using our services.")
                 else:
                     message = ("You've reached your free limit of 20 messages.\nTo continue enjoying our services without interruption, please enter a valid license key.")
 
@@ -4567,21 +4607,21 @@ class GymManagerApp:
 
         validate_button = tk.Button(
             buttons_frame,
-            text="Validate",
+            text="🚀 Validate",
             font=self.FONT_SMALL,
             bg=self.BLUE_BG_COLOUR,
             fg=self.FG_COLOR,
             command=lambda: self.check_license_key(self.license_entry.get()))
-        validate_button.pack(side="left", ipadx=self.button_pading)
+        validate_button.pack(side=tk.LEFT, ipadx=self.button_pading)
 
         Cancel_button = tk.Button(
             buttons_frame,
-            text="Cancel",
+            text="🚫 Cancel",
             font=self.FONT_SMALL,
             bg=self.RED_BG_COLOR,
             fg=self.FG_COLOR,
             command=lambda: self.show_content("Gym Accounts"))
-        Cancel_button.pack(side="right", padx=20, ipadx=self.button_pading)
+        Cancel_button.pack(side=tk.RIGHT, padx=20, ipadx=self.button_pading)
 
         validate_button.bind("<Enter>", lambda event: self.on_hover(event, is_enter=True))
         validate_button.bind("<Leave>", lambda event: self.on_hover(event, is_enter=False))
@@ -4674,7 +4714,7 @@ class GymManagerApp:
 
             if matching_license.empty:
                 messagebox.showerror("License Key Not Found",
-                f"Oops! The license key '{license_key}' you entered was not found in our records.\nPlease double-check and try again or contact support if you need assistance.")
+                f"Oops!\n\nThe license key '{license_key}' you entered was not found in our records.\n\nPlease double-check and try again or contact support if you need assistance.")
                 return
             expiration_date_str = matching_license.iloc[0]["Expiration Date"].strip()
             expiration_date = datetime.strptime(expiration_date_str, "%Y-%m-%d").date()
@@ -4682,20 +4722,20 @@ class GymManagerApp:
 
             if current_date <= expiration_date:
                 messagebox.showinfo("License Key Valid",
-                f"Congratulations! Your license key '{license_key}' is valid until {expiration_date}.\nYou can now send WhatsApp messages seamlessly!")
+                f"Congratulations!\n\nYour license key '{license_key}' is valid until {expiration_date}.\n\nYou can now send WhatsApp messages seamlessly!")
                 self.save_app_data(license_key_expiration=expiration_date)
                 self.show_content("Gym Accounts")
             else:
                 messagebox.showerror("License Key Expired",
-                f"Unfortunately, your license key '{license_key}' expired on {expiration_date}.\nPlease renew your license to continue using the service.")
+                f"Unfortunately,\n\nYour license key '{license_key}' expired on {expiration_date}.\n\nPlease renew your license to continue using the service.")
 
         except requests.exceptions.RequestException as e:
             messagebox.showerror("License Fetch Error",
-            f"An issue occurred while fetching the license from GitHub.\nPlease ensure you have internet access and try again.\nError details: {e}")
+            f"An issue occurred while fetching the license from GitHub.\n\nPlease ensure you have internet access and try again.\n\nError details: {str(e)}")
 
         except Exception as e:
             messagebox.showerror("Unexpected Error",
-            f"Something went wrong.\nPlease restart the application or try again.\nError: {e}")
+            f"Something went wrong.\n\nPlease restart the application or try again.\n\nError: {str(e)}")
 
     def save_app_data(self, message_count=None, license_key_expiration=None):
         """Save the message count and license_key_expiration to the app_data table."""
