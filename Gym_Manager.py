@@ -4221,7 +4221,8 @@ class GymManagerApp:
                 WHERE status = 'Inactive' 
                 AND strftime('%Y-%m', expiration_date) = ? """, (self.expiration_month,))
 
-            true_count, false_count = cursor.fetchone()
+            result = cursor.fetchone()
+            true_count, false_count = result if result is not None else (0, 0)
             conn.close()
 
         except sqlite3.Error as e:
@@ -4246,8 +4247,7 @@ class GymManagerApp:
                 "name",
                 "phone_number",
                 "duration",
-                "Inactivation_date"
-            ),
+                "Inactivation_date"),
             show="headings",
             style="Custom.Treeview")
 
