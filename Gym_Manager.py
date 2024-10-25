@@ -3410,8 +3410,7 @@ class GymManagerApp:
                 fg=self.FG_COLOR,
                 font=self.FONT_LARGE,
                 width=20,
-                command=lambda l=label: self.on_button_click(l)
-            )
+                command=lambda l=label: self.on_button_click(l))
             button.pack(pady=10, padx=10)
 
             button.bind("<Enter>", lambda event: self.on_hover(event, is_enter=True))
@@ -3433,8 +3432,7 @@ class GymManagerApp:
         content_functions = {
             "Add Member": self.show_add_member,
             "View Member Details": self.show_member_details,
-            "Gym Accounts": self.show_gym_accounts
-            }
+            "Gym Accounts": self.show_gym_accounts}
         
         if label in content_functions:
             content_functions[label]()
@@ -3446,7 +3444,7 @@ class GymManagerApp:
 
     def create_top_frame(self, label):
         """Creates a top frame with a label in the center and a back button on the right."""
-        top_frame = tk.Frame(self.background_image, bg="#2B3A6B", highlightbackground= "#FFFFFF" ,highlightthickness= 2)
+        top_frame = tk.Frame(self.background_image, bg="#2B3A6B", highlightbackground= "#FFFFFF",highlightthickness= 2)
         top_frame.pack(fill="x", pady=20, padx=20)
 
         back_button = tk.Button(
@@ -3455,8 +3453,7 @@ class GymManagerApp:
             font=self.FONT_SMALL,
             fg=self.FG_COLOR,
             bg="#6C757D",
-            command=self.recreate_sidebar
-        )
+            command=self.recreate_sidebar)
         back_button.grid(row=0, column=0, padx=(10,0), sticky="w", ipadx=self.button_pading)
 
         back_button.bind("<Enter>", lambda event: self.on_hover(event, is_enter=True))
@@ -3464,9 +3461,6 @@ class GymManagerApp:
 
         label_widget = tk.Label(top_frame, text=label, font=self.FONT_LARGE, bg="#2B3A6B", fg=self.FG_COLOR)
         label_widget.grid(row=0, column=1, pady=5, padx=(0,40), sticky="ew")
-
-        back_button.bind("<Enter>", lambda event: self.on_hover(event, is_enter=True))
-        back_button.bind("<Leave>", lambda event: self.on_hover(event, is_enter=False))
 
         top_frame.grid_columnconfigure(1, weight=1)
 
@@ -3489,8 +3483,8 @@ class GymManagerApp:
             "Submit": self.GREEN_BG_COLOR,
             "Alert" : self.RED_BG_COLOR,
             "Validate": self.BLUE_BG_COLOUR,
-            "Cancel": self.RED_BG_COLOR
-        }
+            "Cancel": self.RED_BG_COLOR,
+            "View Members": self.BG_COLOR}
 
         base_color = color_mapping.get(label, "#2B3A6B")
 
@@ -3499,10 +3493,7 @@ class GymManagerApp:
         elif label == "Exit":
             event.widget.config(bg="#C70039" if is_enter else "#2B3A6B")
         else:
-            if label == "Exit":
-                event.widget.config(bg="#2B3A6B")
-            else:
-                event.widget.config(bg=base_color)
+            event.widget.config(bg=base_color)
 
     def darken_color(self,color, factor=0.7):
         """Darkens the given color by a specified factor."""
@@ -3523,8 +3514,7 @@ class GymManagerApp:
             "Phone Number:",
             "Membership Duration (months):",
             "Membership Fees (Rs):",
-            "Payment Method:",
-        ]
+            "Payment Method:"]
 
         for i, text in enumerate(labels):
             tk.Label(add_member_frame, font=self.FONT_MEDIUM, text=text).grid(row=i,
@@ -3538,8 +3528,7 @@ class GymManagerApp:
             width=25,
             font=self.FONT_SMALL_INPUT,
             validate="key",
-            validatecommand=vcmd_text,
-        )
+            validatecommand=vcmd_text)
         self.entry_name.grid(row=0, column=1, padx=(0, 20))
         self.entry_name.focus()
 
@@ -3561,8 +3550,7 @@ class GymManagerApp:
             width=25,
             font=self.FONT_SMALL_INPUT,
             validate="key",
-            validatecommand=vcmd_numeric,
-        )
+            validatecommand=vcmd_numeric)
         self.entry_number.grid(row=3, column=1, padx=(0, 20))
 
         duration_options = [f"{i} months" for i in range(1, 13)]
@@ -3577,8 +3565,7 @@ class GymManagerApp:
             width=15,
             font=self.FONT_SMALL_INPUT,
             validate="key",
-            validatecommand=vcmd_numeric,
-        )
+            validatecommand=vcmd_numeric)
         self.entry_fees.grid(row=5, column=1, sticky=tk.W)
 
         self.payment_method = tk.StringVar(add_member_frame)
@@ -3596,8 +3583,7 @@ class GymManagerApp:
             command=self.register_member,
             font=self.FONT_SMALL,
             bg=self.GREEN_BG_COLOR,
-            fg=self.FG_COLOR,
-        )
+            fg=self.FG_COLOR)
         register_button.grid(row=0, column=0, padx=20, ipadx=self.button_pading)
 
         reset_button = tk.Button(
@@ -3606,8 +3592,7 @@ class GymManagerApp:
             command=self.reset_form,
             font=self.FONT_SMALL,
             bg=self.RED_BG_COLOR,
-            fg=self.FG_COLOR,
-        )
+            fg=self.FG_COLOR)
         reset_button.grid(row=0, column=1, ipadx=self.button_pading)
 
         register_button.bind("<Enter>", lambda event: self.on_hover(event, is_enter=True))
@@ -3654,8 +3639,6 @@ class GymManagerApp:
             or not member_fees
             or not payment_method or payment_method == "Select"
         ):
-            self.reset_form()
-
             messagebox.showwarning("Input Warning",
             "Please ensure all required fields are filled out before proceeding.")
             return
@@ -3683,7 +3666,7 @@ class GymManagerApp:
 
         except Exception as e:
             messagebox.showerror("Registration Error",
-            f"Unable to Register member information.\n\nPlease try again. Error: {str(e)}")
+            f"Unable to Register member information.\nPlease try again. Error: {str(e)}")
             return
         
         finally:
@@ -3699,8 +3682,7 @@ class GymManagerApp:
             f"• Phone Number: {member_number}\n"
             f"• Membership Duration: {member_duration} months\n"
             f"• Membership Fees: Rs {member_fees}\n"
-            f"• Payment Method: {payment_method}"
-        )
+            f"• Payment Method: {payment_method}")
 
     def show_member_details(self):
         """Display member details in a table format."""
@@ -3867,14 +3849,13 @@ class GymManagerApp:
         labels = [
             "Name:",
             "Phone Number:",
-            "Membership Fees (Rs):",
-            "Date of Activation:",
             "Age:",
             "Gender:",
-            "Membership Duration (months):",
             "Status:",
-            "Payment Method:"
-        ]
+            "Date of Activation:",
+            "Membership Duration (months):",
+            "Membership Fees (Rs):",
+            "Payment Method:"]
 
         for i, text in enumerate(labels):
             tk.Label(self.member_window, font=self.FONT_MEDIUM, text=text).grid(row=i,
@@ -3900,13 +3881,23 @@ class GymManagerApp:
             validatecommand=vcmd_numeric)
         self.entry_number.grid(row=1, column=1, padx=(0, 10))
 
-        self.entry_fees = tk.Entry(
-            self.member_window,
-            width=15,
-            font=self.FONT_SMALL_INPUT,
-            validate="key",
-            validatecommand=vcmd_numeric)
-        self.entry_fees.grid(row=2, column=1, sticky=tk.W)
+        age_options = [str(i) for i in range(1, 101)]
+        self.age_choice = tk.StringVar(self.member_window)
+        self.age_choice.set("Select")
+        age_menu = tk.OptionMenu(self.member_window, self.age_choice, *age_options)
+        age_menu.grid(row=2, column=1, sticky=tk.W)
+        age_menu.config(bg=self.BG_COLOR, fg=self.FG_COLOR, font=self.FONT_SMALL)
+
+        self.gender = tk.StringVar(self.member_window)
+        self.gender.set("Select")
+        gender_menu = tk.OptionMenu(self.member_window, self.gender, "Male", "Female")
+        gender_menu.grid(row=3, column=1, sticky=tk.W)
+        gender_menu.config(bg=self.BG_COLOR, fg=self.FG_COLOR, font=self.FONT_SMALL)
+
+        self.status_choice = tk.StringVar(value="Select")
+        status_menu = tk.OptionMenu(self.member_window, self.status_choice, "Active", "Inactive")
+        status_menu.grid(row=4, column=1, sticky=tk.W)
+        status_menu.config(bg=self.BG_COLOR, fg=self.FG_COLOR, font=self.FONT_SMALL)
 
         one_month_back = date.today() - timedelta(days=30)
         self.date_of_activation_entry = DateEntry(
@@ -3914,21 +3905,8 @@ class GymManagerApp:
             font=self.FONT_SMALL,
             date_pattern="yyyy-MM-dd",
             mindate=one_month_back)
-        self.date_of_activation_entry.grid(row=3, column=1, sticky=tk.W)
+        self.date_of_activation_entry.grid(row=5, column=1, sticky=tk.W)
         self.date_of_activation_entry.bind("<KeyPress>", lambda event: "break")
-
-        age_options = [str(i) for i in range(1, 101)]
-        self.age_choice = tk.StringVar(self.member_window)
-        self.age_choice.set("Select")
-        age_menu = tk.OptionMenu(self.member_window, self.age_choice, *age_options)
-        age_menu.grid(row=4, column=1, sticky=tk.W)
-        age_menu.config(bg=self.BG_COLOR, fg=self.FG_COLOR, font=self.FONT_SMALL)
-
-        self.gender = tk.StringVar(self.member_window)
-        self.gender.set("Select")
-        gender_menu = tk.OptionMenu(self.member_window, self.gender, "Male", "Female")
-        gender_menu.grid(row=5, column=1, sticky=tk.W)
-        gender_menu.config(bg=self.BG_COLOR, fg=self.FG_COLOR, font=self.FONT_SMALL)
 
         duration_options = [f"{i} months" for i in range(1, 13)]
         self.duration_choice = tk.StringVar(self.member_window)
@@ -3937,10 +3915,13 @@ class GymManagerApp:
         duration_menu.grid(row=6, column=1, sticky=tk.W)
         duration_menu.config(bg=self.BG_COLOR, fg=self.FG_COLOR, font=self.FONT_SMALL)
 
-        self.status_choice = tk.StringVar(value="Select")
-        status_menu = tk.OptionMenu(self.member_window, self.status_choice, "Active", "Inactive")
-        status_menu.grid(row=7, column=1, sticky=tk.W)
-        status_menu.config(bg=self.BG_COLOR, fg=self.FG_COLOR, font=self.FONT_SMALL)
+        self.entry_fees = tk.Entry(
+            self.member_window,
+            width=15,
+            font=self.FONT_SMALL_INPUT,
+            validate="key",
+            validatecommand=vcmd_numeric)
+        self.entry_fees.grid(row=7, column=1, sticky=tk.W)
 
         self.payment_method = tk.StringVar(self.member_window)
         self.payment_method.set("Select")
@@ -3995,7 +3976,7 @@ class GymManagerApp:
 
         except Exception as e:
             messagebox.showerror("Updation Error", 
-            f"Unable to update member information.\n\nPlease try again. Error: {str(e)}")
+            f"Unable to update member information.\nPlease try again. Error: {str(e)}")
             return
 
     def delete_record(self):
@@ -4036,7 +4017,7 @@ class GymManagerApp:
         except IndexError:
             pass
         except Exception as e:
-            messagebox.showerror("Selection Error","An unexpected error occurred while processing your selection.\n\n"f"Error details: {str(e)}")
+            messagebox.showerror("Selection Error",f"An unexpected error occurred while processing your selection.\nError details: {str(e)}")
 
     def show_tooltip(self, text):
         """Displays a tooltip with the provided content near the selected row in the treeview."""
@@ -4063,8 +4044,7 @@ class GymManagerApp:
                 self.tooltip.after(5000, self.tooltip.destroy)
 
         except Exception as e:
-            messagebox.showerror("Tooltip Error","An error occurred while trying to display the tooltip.\n\n"
-                f"Error details: {str(e)}")
+            messagebox.showerror("Tooltip Error",f"An error occurred while trying to display the tooltip.\nError details: {str(e)}")
 
     def show_gym_accounts(self):
         """Display Gym Accounts information."""
@@ -4115,6 +4095,9 @@ class GymManagerApp:
             fg=self.FG_COLOR,
             command=self.view_monthly_members)
         view_month_button.grid(row=1, column=0, columnspan=2, pady=10,ipadx=self.button_pading)
+
+        view_month_button.bind("<Enter>", lambda event: self.on_hover(event, is_enter=True))
+        view_month_button.bind("<Leave>", lambda event: self.on_hover(event, is_enter=False))
 
     def get_month_options(self):
         """Returns a list of months available in the database for selecting."""
@@ -4349,8 +4332,7 @@ class GymManagerApp:
             "Status:",
             "Date of Activation:",
             "Membership Duration (months):",
-            "Membership Fees (Rs):",
-        ]
+            "Membership Fees (Rs):"]
         
         for i, text in enumerate(labels):
             tk.Label(self.member_window, font=self.FONT_MEDIUM, text=text).grid(row=i,
@@ -4378,7 +4360,7 @@ class GymManagerApp:
         status_menu.grid(row=2, column=1, sticky=tk.W)
         self.status_choice.trace_add("write", lambda *args: self.update_date_entry_state())
 
-        date_back = date.today() - timedelta(days=10)
+        date_back = date.today() - timedelta(days=5)
         self.date_of_activation_entry = DateEntry(
             self.member_window,
             font=self.FONT_SMALL,
@@ -4506,7 +4488,7 @@ class GymManagerApp:
             if messages_sent == len(rows):
                 messagebox.showinfo("All Inactive Members Notified!","All inactive members have been successfully alerted about their membership status!")
             else:
-                messagebox.showwarning("Message Limit Reached", "You've reached your free limit of 20 messages. Please enter a valid license key to continue sending messages.")
+                messagebox.showwarning("Message Limit Reached", "You've reached your free limit of 20 messages. \nPlease enter a valid license key to continue sending messages.")
 
         except sqlite3.Error as e:
             self.root.deiconify()
@@ -4709,7 +4691,7 @@ class GymManagerApp:
 
         except requests.exceptions.RequestException as e:
             messagebox.showerror("License Fetch Error",
-            f"An issue occurred while fetching the license file from GitHub.\nPlease ensure you have internet access and try again.\nError details: {e}")
+            f"An issue occurred while fetching the license from GitHub.\nPlease ensure you have internet access and try again.\nError details: {e}")
 
         except Exception as e:
             messagebox.showerror("Unexpected Error",
