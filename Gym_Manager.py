@@ -1,11 +1,11 @@
 import base64
 import os
+import socket
 import sqlite3
 import sys
 import time
 from datetime import date, datetime, timedelta
 import pandas as pd
-import pywhatkit as kit
 import requests
 from dateutil.relativedelta import relativedelta
 from PIL import Image, ImageTk
@@ -34,6 +34,8 @@ sqlite3.register_converter("date", convert_date)
 class GymManagerApp:
     def __init__(self, root):
         """Initializes the Gym Manager application."""
+        import pywhatkit as kit
+        self.kit = kit
         self.root = root
         self.root.state("zoomed")
         self.root.title("Gym Manager")
@@ -55,6 +57,7 @@ class GymManagerApp:
 
         if self.update_expired_members():
             self.setup_ui()
+
 
     def create_table(self):
         """Creates the 'members' and 'app_data' tables in the database if they don't exist."""
@@ -4513,17 +4516,17 @@ class GymManagerApp:
             messages_sent = 0
 
             for row in rows:
-
                 if not self.license_valid and self.message_count >= 20:
-                    break  
+                    break
 
-                self.process_row_and_send_message(row)
-                self.message_count += 1
-                self.save_app_data(message_count=self.message_count)
-                messages_sent += 1 
-
-            self.root.deiconify()
-            self.root.state("zoomed")
+                if self.process_row_and_send_message(row):
+                    self.message_count += 1
+                    self.save_app_data(message_count=self.message_count)
+                    messages_sent += 1
+                else:
+                    self.root.deiconify()
+                    self.root.state("zoomed")
+                    return
 
             if messages_sent == len(rows):
                 messagebox.showinfo("All Inactive Members Notified!","All inactive members have been successfully alerted about their membership status!")
@@ -4662,19 +4665,22 @@ class GymManagerApp:
 
         phone_number_with_code = f"+91{phone_number}"
 
-        self.send_message(phone_number_with_code, message)
-
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute("""UPDATE members SET notified = 'True' WHERE id = ?""", (member_id,))
+        if self.send_message(phone_number_with_code, message):
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("UPDATE members SET notified = 'True' WHERE id = ?", (member_id,))
+            return True
+        return False
 
     def send_message(self, phone_number, message):
         """Send a WhatsApp message and handle errors."""
         try:
-            kit.sendwhatmsg_instantly(phone_number, message, 15, True)
+            self.kit.sendwhatmsg_instantly(phone_number, message, 15, True)
+            return True
         except Exception as e:
             messagebox.showerror("Message Sending Error",
-            f"Failed to send message to {phone_number}.\nError details: {str(e)}")
+                                 f"Failed to send message to {phone_number}.\nError details: {str(e)}")
+            return False
 
     def process_license_key(self, event):
         """Validate and format the license key with '-' after every 4 characters, allowing only alphanumeric characters."""
@@ -4756,10 +4762,23 @@ class GymManagerApp:
             messagebox.showerror("Database Error", f"An error occurred: {str(e)}")
 
 def main():
-    root = tk.Tk()
-    GymManagerApp(root)
-    root.mainloop()
+    if not check_internet():
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showerror("Connection Error", "Internet connection issue.\nPlease check your connection.")
+        root.destroy()
+    else:
+        root = tk.Tk()
+        GymManagerApp(root)
+        root.mainloop()
 
+def check_internet():
+    """Checks for an active internet connection."""
+    try:
+        socket.create_connection(("8.8.8.8", 53), timeout=5)
+        return True
+    except OSError:
+        return False
 
 if __name__ == "__main__":
     main()
