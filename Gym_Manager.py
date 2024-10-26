@@ -4222,7 +4222,7 @@ class GymManagerApp:
                 AND strftime('%Y-%m', expiration_date) = ? """, (self.expiration_month,))
 
             result = cursor.fetchone()
-            true_count, false_count = result if result is None else (0, 0)
+            true_count, false_count = (0, 0) if result == (None, None) else result
             conn.close()
 
         except sqlite3.Error as e:
