@@ -4681,7 +4681,7 @@ class GymManagerApp:
     def send_message(self, phone_number, message):
         """Send a WhatsApp message and handle errors."""
         try:
-            self.kit.sendwhatmsg_instantly(phone_number, message, 15, True)
+            self.kit.sendwhatmsg_instantly(phone_number, message, 20, True)
             return True
         except Exception as e:
             messagebox.showerror("Message Sending Error",
