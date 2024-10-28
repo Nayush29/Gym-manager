@@ -4207,11 +4207,11 @@ class GymManagerApp:
 
     def view_inactive_members(self):
         """Displays the inactive members."""
-        inner_frame = tk.Frame(self.Notification_frame)
-        inner_frame.pack(fill=tk.BOTH, expand=True)
+        self.inner_frame = tk.Frame(self.Notification_frame)
+        self.inner_frame.pack(fill=tk.BOTH, expand=True)
 
         self.expiration_month = datetime.now().strftime("%Y-%m")
-
+        
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
@@ -4231,7 +4231,7 @@ class GymManagerApp:
         except sqlite3.Error as e:
             messagebox.showerror("Database Error", f"An error occurred: {str(e)}")
 
-        top_frame = tk.Frame(inner_frame)
+        top_frame = tk.Frame(self.inner_frame)
         top_frame.pack(fill=tk.X, padx=20, pady=10)
 
         title_label = tk.Label(top_frame, text="Inactive Members Details", font=self.FONT_MEDIUM)
@@ -4244,7 +4244,7 @@ class GymManagerApp:
         not_notified_label.pack(side=tk.RIGHT)
 
         self.tree = ttk.Treeview(
-            inner_frame,
+            self.inner_frame,
             columns=(
                 "id",
                 "name",
@@ -4282,7 +4282,7 @@ class GymManagerApp:
         except sqlite3.Error as e:
             messagebox.showerror("Database Error", f"An error occurred: {str(e)}")
 
-        scrollbar = ttk.Scrollbar(inner_frame, orient=tk.VERTICAL, command=self.tree.yview)
+        scrollbar = ttk.Scrollbar(self.inner_frame, orient=tk.VERTICAL, command=self.tree.yview)
         self.tree.configure(yscroll=scrollbar.set)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.tree.pack(padx=(15, 0), fill=tk.BOTH, expand=True)
@@ -4528,10 +4528,16 @@ class GymManagerApp:
                     self.root.state("zoomed")
                     return
 
+            self.root.deiconify()
+            self.root.state("zoomed")
+
             if messages_sent == len(rows):
                 messagebox.showinfo("All Inactive Members Notified!","All inactive members have been successfully alerted about their membership status!")
+                self.show_content("Gym Accounts")
+
             else:
                 messagebox.showwarning("Message Limit Reached", "You've reached your free limit of 20 messages. \nPlease enter a valid license key to continue sending messages.")
+                self.create_license_key_interface()
 
         except sqlite3.Error as e:
             self.root.deiconify()
@@ -4679,7 +4685,7 @@ class GymManagerApp:
             return True
         except Exception as e:
             messagebox.showerror("Message Sending Error",
-                                 f"Failed to send message to {phone_number}.\nError details: {str(e)}")
+            f"Failed to send message to {phone_number}.\nError details: {str(e)}")
             return False
 
     def process_license_key(self, event):
