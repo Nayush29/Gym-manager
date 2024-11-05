@@ -6,6 +6,7 @@ import sys
 import time
 import requests
 import webbrowser
+import babel.numbers
 import tkinter as tk
 import pandas as pd
 from io import BytesIO, StringIO
@@ -3973,7 +3974,7 @@ class GymManagerApp:
         self.date_of_activation_entry = DateEntry(
             self.member_window,
             font=self.FONT_SMALL,
-            date_pattern="dd-MM-yyyy",
+            date_pattern="DD-MM-YYYY",
             mindate=one_month_back)
         self.date_of_activation_entry.grid(row=5, column=1, sticky=tk.W)
         self.date_of_activation_entry.bind("<KeyPress>", lambda event: "break")
@@ -4693,12 +4694,12 @@ class GymManagerApp:
         status_menu.grid(row=2, column=1, sticky=tk.W)
         self.status_choice.trace_add("write", lambda *args: self.update_date_entry_state())
 
-        date_back = date.today() - timedelta(days=5)
+        back_date = date.today() - timedelta(days=5)
         self.date_of_activation_entry = DateEntry(
             self.member_window,
             font=self.FONT_SMALL,
-            date_pattern="dd-MM-yyyy",
-            mindate=date_back)
+            date_pattern="DD-MM-YYYY",
+            mindate=back_date)
         self.date_of_activation_entry.grid(row=3, column=1, sticky=tk.W)
         self.date_of_activation_entry.bind("<KeyPress>", lambda event: "break")
 
