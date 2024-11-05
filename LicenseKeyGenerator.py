@@ -10,13 +10,8 @@ from tkinter import messagebox
 
 class LicenseKeyGenerator:
     CSV_FILE_NAME = "License_keys.csv"
-    GITHUB_REPO_PATH = (
-        r"C:\Users\mayan\OneDrive\Documents\VS\Python Scripts\Gym Manager"
-    )
-
-    INPUT_ERROR = (
-        "Please enter a valid positive number for the expiration duration in months."
-    )
+    GITHUB_REPO_PATH = (r"C:\Users\mayan\OneDrive\Documents\VS\Python Scripts\Gym Manager")
+    INPUT_ERROR = ("Please enter a valid positive number for the expiration duration in months.")
 
     def __init__(self, root):
         self.root = root
@@ -28,11 +23,7 @@ class LicenseKeyGenerator:
 
     def _setup_ui(self):
         """Setup the user interface components."""
-        tk.Label(
-            self.root,
-            text="Enter expiration duration in months.",
-            font=("Arial", 12, "bold"),
-        ).pack(pady=10)
+        tk.Label(self.root, "Enter expiration duration in months.", font=("Arial", 12, "bold")).pack(pady=10)
 
         self.expiration_entry = tk.Entry(self.root, font=("Arial", 14))
         self.expiration_entry.pack(pady=5)
@@ -47,24 +38,20 @@ class LicenseKeyGenerator:
             command=self.generate_key,
             bg="green",
             font=("Arial", 12, "bold"),
-            fg="white",
-        )
+            fg="white")
         self.generate_button.pack(pady=20)
 
     def generate_license_key(self):
         """Generate a random license key in the format AAAA-1234-BBBB-1234."""
-        return "-".join(
-            [
+        return "-".join([
                 "".join(random.choices(string.ascii_uppercase, k=4)),
                 "".join(random.choices(string.digits, k=4)),
                 "".join(random.choices(string.ascii_uppercase, k=4)),
-                "".join(random.choices(string.digits, k=4)),
-            ]
-        )
+                "".join(random.choices(string.digits, k=4))])
 
     def save_key_to_csv(self, license_key, months):
         """Save the license key and expiration type to a CSV file."""
-        expiration_date = (datetime.now() + timedelta(days=30 * months)).date()
+        expiration_date = (datetime.now() + timedelta(days=30 * months)).strftime("%d-%m-%Y")
         csv_file_path = os.path.join(self.GITHUB_REPO_PATH, self.CSV_FILE_NAME)
 
         try:
@@ -105,10 +92,8 @@ class LicenseKeyGenerator:
 
             self.git_commit_and_push()
 
-            messagebox.showinfo(
-                "Generated Key",
-                f"License Key: {license_key}\nExpiration: {months} month{'s' if months > 1 else ''}",
-            )
+            messagebox.showinfo("Generated Key",
+            f"License Key: {license_key}\nExpiration: {months} month{'s' if months > 1 else ''}")
 
             self.root.quit()
 

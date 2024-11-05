@@ -4,140 +4,124 @@ import socket
 import sqlite3
 import sys
 import time
-from datetime import date, datetime, timedelta
-import pandas as pd
 import requests
-from dateutil.relativedelta import relativedelta
-from PIL import Image, ImageTk
-from tkcalendar import DateEntry
-from tkinter import ttk, messagebox
-import tkinter as tk
 import webbrowser
+import tkinter as tk
+import pandas as pd
 from io import BytesIO, StringIO
-import babel.numbers
-
-
-def adapt_date(date_obj):
-    """Converts a date object to a string in ISO format for storage in SQLite."""
-    return date_obj.isoformat()
-
-
-def convert_date(date_text):
-    """Converts a byte string from the database back into a date object."""
-    return datetime.strptime(date_text.decode("utf-8"), "%Y-%m-%d").date()
-
-
-sqlite3.register_adapter(date, adapt_date)
-sqlite3.register_converter("date", convert_date)
-
+from tkcalendar import DateEntry
+from tkinter import ttk,messagebox
+from PIL import Image, ImageTk
+from datetime import date, datetime, timedelta
+from dateutil.relativedelta import relativedelta
 
 class GymManagerApp:
     def __init__(self, root):
         """Initializes the Gym Manager application."""
         import pywhatkit as kit
         self.kit = kit
+
         self.root = root
         self.root.state("zoomed")
         self.root.title("Gym Manager")
-        self.db_path = os.path.join(os.path.dirname(sys.executable), "gym.db")
+
         self.BG_COLOR = "#0071C5"
         self.FG_COLOR = "#FFFFFF"
         self.GREEN_BG_COLOR = "#059212"
         self.RED_BG_COLOR = "#C40C0C"
-        self.BLUE_BG_COLOUR ="#000080"
-        self.button_pading = 10
+        self.BLUE_BG_COLOR = "#000080"
+        self.button_padding = 10
         self.FONT_LARGE = ("Times New Roman", 20, "bold")
         self.FONT_MEDIUM = ("Poppins", 16, "bold")
         self.FONT_SMALL_INPUT = ("Poppins", 16)
         self.FONT_SMALL = ("Poppins", 13, "bold")
-        self.FONT_MEDIUM_Table = ("Poppins", 14, "bold")
-        self.FONT_SMALL_Table  = ("Poppins", 13)
+        self.FONT_MEDIUM_TABLE = ("Poppins", 14, "bold")
+        self.FONT_SMALL_TABLE = ("Poppins", 13)
 
-        self.create_table()
+        self.db_path = os.path.join(os.path.dirname(sys.executable), "gym.db")
 
-        if self.update_expired_members():
+        self.init_database()
+
+        if not self.update_expired_members():
+            self.root.destroy()
+        else:
             self.setup_ui()
 
-
-    def create_table(self):
-        """Creates the 'members' and 'app_data' tables in the database if they don't exist."""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS members (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                age INTEGER NOT NULL,
-                gender TEXT NOT NULL,
-                phone_number TEXT NOT NULL,
-                duration TEXT NOT NULL,
-                fees REAL NOT NULL,
-                payment_method TEXT NOT NULL,
-                date_of_activation TEXT NOT NULL,
-                expiration_date TEXT,
-                status TEXT NOT NULL DEFAULT 'Active' CHECK (status IN ('Active', 'Inactive')),
-                notified TEXT NOT NULL DEFAULT 'False' CHECK (notified IN ('True', 'False'))
-                )
-            """
-            )
-        
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS app_data (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                message_count INTEGER DEFAULT 0,
-                license_key_expiration TEXT DEFAULT NULL
-                )
-            """
-            )
-        conn.commit()
-        conn.close()
+    def init_database(self):
+        """Creates tables in the database if they don't exist."""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """ CREATE TABLE IF NOT EXISTS members (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    age INTEGER NOT NULL,
+                    gender TEXT NOT NULL,
+                    phone_number TEXT NOT NULL,
+                    duration TEXT NOT NULL,
+                    fees REAL NOT NULL,
+                    payment_method TEXT NOT NULL,
+                    date_of_activation TEXT NOT NULL,
+                    expiration_date TEXT,
+                    status TEXT NOT NULL DEFAULT 'Active' CHECK (status IN ('Active', 'Inactive')),
+                    notified TEXT NOT NULL DEFAULT 'True' CHECK (notified IN ('True', 'False')))
+                """ )
+            
+            cursor.execute(
+                """ CREATE TABLE IF NOT EXISTS app_data (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    message_count INTEGER DEFAULT 0,
+                    license_key_expiration TEXT DEFAULT NULL)
+                """ )
+            
+            conn.commit()
 
     def update_expired_members(self):
         """Checks and updates the status of members based on their expiration date."""
         try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            current_date = datetime.now().date()
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                current_date = datetime.now().date()
 
-            cursor.execute("SELECT license_key_expiration, message_count FROM app_data")
-            app_data = cursor.fetchone()
+                cursor.execute(" SELECT license_key_expiration, message_count FROM app_data ")
+                app_data = cursor.fetchone()
 
-            if app_data:
-                license_key_expiration_str, message_count = app_data
-                if license_key_expiration_str and message_count > 20:
-                    license_key_expiration = datetime.strptime(license_key_expiration_str, "%Y-%m-%d").date()
-                    
-                    if current_date > license_key_expiration:
-                        cursor.execute("UPDATE app_data SET message_count = 0")
+                if app_data:
+                    license_key_expiration_str, message_count = app_data
+                    if license_key_expiration_str and message_count > 20:
+                        license_key_expiration = datetime.strptime(license_key_expiration_str,
+                        "%d-%m-%Y").date()
+                        if current_date > license_key_expiration:
+                            cursor.execute(" UPDATE app_data SET message_count = 0 ")
 
-            cursor.execute("SELECT id, duration, date_of_activation FROM members WHERE status = 'Active'")
-            rows = cursor.fetchall()
-            updates = []
+                cursor.execute(" SELECT id, duration, date_of_activation FROM members WHERE status = 'Active' ")
+                rows = cursor.fetchall()
+                updates_inactive = []
+                updates_active = []
 
-            for member_id, duration_str, date_of_activation in rows:
-                duration_months = int(duration_str.split()[0])
-                activation_date = datetime.strptime(date_of_activation, "%Y-%m-%d").date()
-                expiration_date = activation_date + relativedelta(months=duration_months)
+                for member_id, duration_str, date_of_activation in rows:
+                    duration_months = int(duration_str.split()[0])
+                    activation_date = datetime.strptime(date_of_activation, "%d-%m-%Y").date()
+                    expiration_date = activation_date + relativedelta(months=duration_months)
+                    expiration_date_str = expiration_date.strftime("%d-%m-%Y")
 
-                if current_date > expiration_date:
-                    updates.append((expiration_date, "Inactive", member_id))
-                else:
-                    updates.append((expiration_date, "Active", member_id))
+                    if current_date > expiration_date:
+                        updates_inactive.append((expiration_date_str, "Inactive", "False", member_id))
+                    else:
+                        updates_active.append((expiration_date_str, member_id))
 
-            if updates:
-                cursor.executemany("UPDATE members SET expiration_date = ?, status = ? WHERE id = ?",updates)
+                if updates_inactive:
+                    cursor.executemany(" UPDATE members SET expiration_date = ?, status = ?, notified = ? WHERE id = ? ", updates_inactive)
 
-            conn.commit()
-            return True
-        
+                if updates_active:
+                    cursor.executemany(" UPDATE members SET expiration_date = ? WHERE id = ? ", updates_active)
+
+                conn.commit()
+                return True
+
         except sqlite3.Error as e:
             messagebox.showerror("Database Error", f"An error occurred: {str(e)}")
             return False
-        
-        finally:
-            conn.close()
 
     def setup_ui(self):
         """Sets up the user interface for the Gym Manager application."""
@@ -3391,28 +3375,32 @@ class GymManagerApp:
         self.create_buttons()
 
     def load_and_resize_image(self, event):
-        """Update the background image to fit the window."""
+        """Update the background image to fit the window size efficiently."""
         try:
-            image_bytes = base64.b64decode(self.image_data)
-            image = Image.open(BytesIO(image_bytes))
+            if not self.photo:
+                image_bytes = base64.b64decode(self.image_data)
+                self.image = Image.open(BytesIO(image_bytes))
+
             width, height = self.background_image.winfo_width(), self.background_image.winfo_height()
 
             if self.photo:
                 old_width, old_height = self.photo.width(), self.photo.height()
                 if old_width == width and old_height == height:
                     return
-                
-            resized_image = image.resize((width, height), Image.LANCZOS)
+
+            resized_image = self.image.resize((width, height), Image.LANCZOS)
             self.photo = ImageTk.PhotoImage(resized_image)
-            self.background_image.config(image=(self.photo))
-            
+            self.background_image.config(image=self.photo)
+
+        except IOError as e:
+            messagebox.showerror("Image Load Error", f"Failed to load the image file.\nError: {str(e)}")
         except Exception as e:
-            messagebox.showerror("Image Error", f"Failed to load the image.\nError: {str(e)}")
+            messagebox.showerror("Unexpected Error", f"An unexpected error occurred.\nError: {str(e)}")
 
     def create_buttons(self):
         """Create and add buttons to the sidebar."""
-        self.sidebar_frame = tk.Frame(self.background_image, bg=self.FG_COLOR,
-        highlightbackground="#FFD700", highlightthickness= 4)
+        self.sidebar_frame = tk.Frame(self.background_image, highlightbackground="#FFD700",
+        highlightthickness= 4)
         self.sidebar_frame.pack(side=tk.LEFT, padx=150)
 
         button_data = ["Add Member", "View Member Details", "Gym Accounts", "Exit"]
@@ -3434,7 +3422,7 @@ class GymManagerApp:
     def on_button_click(self, label):
         """Handle button clicks."""
         if label == "Exit":
-            self.root.quit()
+            self.root.destroy()
         else:
             self.show_content(label)
 
@@ -3447,7 +3435,7 @@ class GymManagerApp:
         content_functions = {
             "Add Member": self.show_add_member,
             "View Member Details": self.show_member_details,
-            "Gym Accounts": self.show_gym_accounts}
+            "Gym Accounts": self.show_gym_accounts }
         
         if label in content_functions:
             content_functions[label]()
@@ -3456,10 +3444,13 @@ class GymManagerApp:
         """Function to clear the main frame before loading new content."""
         for widget in self.background_image.winfo_children():
             widget.destroy()
+            
+        if hasattr(self, "tooltip"):
+            self.tooltip.destroy()
 
     def create_top_frame(self, label):
         """Creates a top frame with a label in the center and a back button on the right."""
-        top_frame = tk.Frame(self.background_image, bg="#2B3A6B", highlightbackground= "#FFFFFF",highlightthickness= 2)
+        top_frame = tk.Frame(self.background_image, bg="#2B3A6B", highlightthickness= 2)
         top_frame.pack(fill="x", pady=20, padx=20)
 
         back_button = tk.Button(
@@ -3469,13 +3460,13 @@ class GymManagerApp:
             fg=self.FG_COLOR,
             bg="#6C757D",
             command=self.recreate_sidebar)
-        back_button.grid(row=0, column=0, padx=(10,0), sticky="w", ipadx=self.button_pading)
+        back_button.grid(row=0, column=0, padx=10, sticky="w", ipadx=self.button_padding)
 
         back_button.bind("<Enter>", lambda event: self.on_hover(event, is_enter=True))
         back_button.bind("<Leave>", lambda event: self.on_hover(event, is_enter=False))
 
         label_widget = tk.Label(top_frame, text=label, font=self.FONT_LARGE, bg="#2B3A6B", fg=self.FG_COLOR)
-        label_widget.grid(row=0, column=1, pady=5, padx=(0,70), sticky="ew")
+        label_widget.grid(row=0, column=1, pady=5, padx=(0,80), sticky="ew")
 
         top_frame.grid_columnconfigure(1, weight=1)
 
@@ -3497,9 +3488,10 @@ class GymManagerApp:
             "✂️ Delete": self.RED_BG_COLOR,
             "✅ Submit": self.GREEN_BG_COLOR,
             "⚠️ Alert" : self.RED_BG_COLOR,
-            "🚀 Validate": self.BLUE_BG_COLOUR,
+            "🚀 Validate": self.BLUE_BG_COLOR,
             "🚫 Cancel": self.RED_BG_COLOR,
-            "🔗 View Members": self.BG_COLOR}
+            "View Members": self.BG_COLOR,
+            "Search": "#FFB300"}
 
         base_color = color_mapping.get(label, "#2B3A6B")
 
@@ -3510,13 +3502,13 @@ class GymManagerApp:
         else:
             event.widget.config(bg=base_color)
 
-    def darken_color(self,color, factor=0.7):
+    def darken_color(self, color):
         """Darkens the given color by a specified factor."""
         color = color.lstrip('#')
         rgb = [int(color[i:i + 2], 16) for i in (0, 2, 4)]
-        darkened_rgb = [int(c * factor) for c in rgb]
+        darkened_rgb = [int(c * 0.8) for c in rgb]
         return '#' + ''.join(f'{c:02x}' for c in darkened_rgb)
-
+    
     def show_add_member(self):
         """Display the Add Member interface."""
         add_member_frame = tk.Frame(self.background_image)
@@ -3527,8 +3519,8 @@ class GymManagerApp:
             "Age:",
             "Gender:",
             "Phone Number:",
-            "Membership Duration (months):",
-            "Membership Fees (Rs):",
+            "Membership Duration:",
+            "Membership Fees: Rs",
             "Payment Method:"]
 
         for i, text in enumerate(labels):
@@ -3547,7 +3539,7 @@ class GymManagerApp:
         self.entry_name.grid(row=0, column=1, padx=(0, 20))
         self.entry_name.focus()
 
-        age_options = [str(i) for i in range(1, 101)]
+        age_options = [str(i) for i in range(10, 101)]
         self.age_choice = tk.StringVar(add_member_frame)
         self.age_choice.set("Select")
         age_menu = tk.OptionMenu(add_member_frame, self.age_choice, *age_options)
@@ -3568,7 +3560,7 @@ class GymManagerApp:
             validatecommand=vcmd_numeric)
         self.entry_number.grid(row=3, column=1, padx=(0, 20))
 
-        duration_options = [f"{i} months" for i in range(1, 13)]
+        duration_options = [f"{i} month" if i == 1 else f"{i} month's" for i in range(1, 13)]
         self.duration_choice = tk.StringVar(add_member_frame)
         self.duration_choice.set("Select")
         duration_menu = tk.OptionMenu(add_member_frame, self.duration_choice, *duration_options)
@@ -3599,7 +3591,7 @@ class GymManagerApp:
             font=self.FONT_SMALL,
             bg=self.GREEN_BG_COLOR,
             fg=self.FG_COLOR)
-        register_button.grid(row=0, column=0, padx=20, ipadx=self.button_pading)
+        register_button.grid(row=0, column=0, padx=20, ipadx=self.button_padding)
 
         reset_button = tk.Button(
             buttons_frame,
@@ -3608,12 +3600,11 @@ class GymManagerApp:
             font=self.FONT_SMALL,
             bg=self.RED_BG_COLOR,
             fg=self.FG_COLOR)
-        reset_button.grid(row=0, column=1, ipadx=self.button_pading)
+        reset_button.grid(row=0, column=1, ipadx=self.button_padding)
 
-        register_button.bind("<Enter>", lambda event: self.on_hover(event, is_enter=True))
-        register_button.bind("<Leave>", lambda event: self.on_hover(event, is_enter=False))
-        reset_button.bind("<Enter>", lambda event: self.on_hover(event, is_enter=True))
-        reset_button.bind("<Leave>", lambda event: self.on_hover(event, is_enter=False))
+        for button in (register_button, reset_button):
+            button.bind("<Enter>", lambda event: self.on_hover(event, is_enter=True))
+            button.bind("<Leave>", lambda event: self.on_hover(event, is_enter=False))
 
     def reset_form(self):
         """Reset the form fields to their default state."""
@@ -3633,7 +3624,7 @@ class GymManagerApp:
             return all(char.isalpha() or char.isspace() for char in input_str)
         else:
             return False
-
+        
     def register_member(self):
         """Registers a new member into the database with the provided details from the form."""
         member_name = self.entry_name.get()
@@ -3643,62 +3634,36 @@ class GymManagerApp:
         member_duration = self.duration_choice.get()
         member_fees = self.entry_fees.get()
         payment_method = self.payment_method.get()
-        date_of_activation = datetime.now().strftime("%Y-%m-%d")
-        
-        if (
-            not member_name
-            or not member_age or member_age == "Select"
-            or not member_gender or member_gender == "Select"
-            or not member_number
-            or not member_duration or member_duration == "Select"
-            or not member_fees
-            or not payment_method or payment_method == "Select"
-        ):
-            messagebox.showwarning("Input Warning",
+        date_of_activation = datetime.now().strftime("%d-%m-%Y")
+
+        if not all([member_name, member_number, member_fees]) or member_age == "Select" or member_gender == "Select" or member_duration == "Select" or payment_method == "Select":
+            messagebox.showwarning("Input Required",
             "Please ensure all required fields are filled out before proceeding.")
             return
-        
+
+        formatted_fees = f"Rs {member_fees}"
+
         try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            cursor.execute("""INSERT INTO members (name, age, gender, phone_number, duration, fees,payment_method, date_of_activation)VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (
-                member_name,
-                member_age,
-                member_gender,
-                member_number,
-                member_duration,
-                ("Rs " + member_fees),
-                payment_method,
-                date_of_activation
-            ))
-            
-            conn.commit()
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(""" INSERT INTO members (name, age, gender, phone_number, duration, fees, payment_method, date_of_activation) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (member_name, member_age, member_gender, member_number, member_duration, formatted_fees, payment_method, date_of_activation))
+                conn.commit()
+
+                self.reset_form()
+                messagebox.showinfo(
+                    "Registration Successful!",
+                    f"{member_name} registered successfully with the following details:\n\n"
+                    f"• Age: {member_age}\n"
+                    f"• Gender: {member_gender}\n"
+                    f"• Phone Number: {member_number}\n"
+                    f"• Membership Duration: {member_duration}\n"
+                    f"• Membership Fees: {formatted_fees}\n"
+                    f"• Payment Method: {payment_method}")
 
         except sqlite3.Error as e:
             messagebox.showerror("Database Error", f"An error occurred: {str(e)}")
-            return
-
-        except Exception as e:
-            messagebox.showerror("Registration Error",
-            f"Unable to Register member information.\nPlease try again. Error: {str(e)}")
-            return
         
-        finally:
-            conn.close()
-
-        self.reset_form()
-
-        messagebox.showinfo(
-            "Registration Successful!",
-            f"{member_name} registered successfully with the following details:\n\n"
-            f"• Age: {member_age}\n"
-            f"• Gender: {member_gender}\n"
-            f"• Phone Number: {member_number}\n"
-            f"• Membership Duration: {member_duration} months\n"
-            f"• Membership Fees: Rs {member_fees}\n"
-            f"• Payment Method: {payment_method}")
-
     def show_member_details(self):
         """Display member details in a table format."""
         outer_frame = tk.Frame(self.background_image)
@@ -3707,6 +3672,9 @@ class GymManagerApp:
         inner_frame = tk.Frame(outer_frame)
         inner_frame.pack(padx=10, fill=tk.BOTH, expand=True)
         
+        top_frame = tk.Frame(inner_frame)
+        top_frame.pack(pady=10, padx=20, fill=tk.X)
+
         month_options = self.get_month_options() or ["No Data Available"]
         self.current_month = datetime.now().strftime("%B %Y")
 
@@ -3715,10 +3683,33 @@ class GymManagerApp:
         else:
             self.selected_month = tk.StringVar(value=month_options[0])
 
-        month_dropdown = tk.OptionMenu(inner_frame, self.selected_month, *month_options)
-        month_dropdown.pack(pady=10)
+        month_dropdown = tk.OptionMenu(top_frame, self.selected_month, *month_options)
+        month_dropdown.pack(side=tk.LEFT)
         month_dropdown.config(font=(self.FONT_SMALL),bg=self.BG_COLOR, fg=self.FG_COLOR)
         self.selected_month.trace_add("write", lambda *args: self.populate_treeview())
+
+        search_button = tk.Button(
+            top_frame, 
+            text="Search", 
+            bg="#FFB300", 
+            fg=self.FG_COLOR,
+            font=self.FONT_SMALL,
+            command=self.search_members)
+        search_button.pack(side=tk.RIGHT, ipadx=self.button_padding)
+
+        search_button.bind("<Enter>", lambda event: self.on_hover(event, is_enter=True))
+        search_button.bind("<Leave>", lambda event: self.on_hover(event, is_enter=False))
+
+        placeholder_text = "Enter member name to search"
+
+        vcmd_text = (top_frame.register(self.validate_input), "%P", "letters")
+
+        self.search_box = tk.Entry(top_frame, width=30, font=self.FONT_SMALL_INPUT, fg="gray", validate="key",validatecommand=vcmd_text)
+        self.search_box.insert(0, placeholder_text)
+        self.search_box.pack(padx=10, side=tk.RIGHT)
+
+        self.search_box.bind("<FocusIn>", lambda event: self.clear_placeholder(event, placeholder_text))
+        self.search_box.bind("<FocusOut>", lambda event: self.add_placeholder(event, placeholder_text))
 
         self.tree = ttk.Treeview(
             inner_frame,
@@ -3733,10 +3724,9 @@ class GymManagerApp:
                 "Payment",
                 "date_of_activation",
                 "expiration_date",
-                "status"
-            ),
-            show="headings",
-            style="custom.Treeview")
+                "status"),
+            show="headings", 
+            style="custom.Treeview" )
 
         self.tree.heading("id", text="ID")
         self.tree.heading("name", text="Name")
@@ -3778,7 +3768,7 @@ class GymManagerApp:
             font=self.FONT_SMALL,
             text="⬆️ Update",
             command=self.update_record)
-        update_button.pack(side=tk.LEFT, padx=20, ipadx=self.button_pading)
+        update_button.pack(side=tk.LEFT, padx=20, ipadx=self.button_padding)
 
         delete_button = tk.Button(
             base_frame,
@@ -3787,52 +3777,118 @@ class GymManagerApp:
             font=self.FONT_SMALL,
             text="✂️ Delete",
             command=self.delete_record)
-        delete_button.pack(side=tk.RIGHT, ipadx=self.button_pading)
+        delete_button.pack(side=tk.RIGHT, ipadx=self.button_padding)
 
-        update_button.bind("<Enter>", lambda event: self.on_hover(event, is_enter=True))
-        update_button.bind("<Leave>", lambda event: self.on_hover(event, is_enter=False))
-        delete_button.bind("<Enter>", lambda event: self.on_hover(event, is_enter=True))
-        delete_button.bind("<Leave>", lambda event: self.on_hover(event, is_enter=False))
+        for button in (delete_button, update_button):
+            button.bind("<Enter>", lambda event: self.on_hover(event, is_enter=True))
+            button.bind("<Leave>", lambda event: self.on_hover(event, is_enter=False))
 
         self.tree.bind("<Double-1>", self.on_click)
 
         style = ttk.Style()
-        style.configure("custom.Treeview.Heading", font=self.FONT_MEDIUM_Table)
-        style.configure("custom.Treeview", font=self.FONT_SMALL_Table, rowheight=35)
+        style.configure("custom.Treeview.Heading", font=self.FONT_MEDIUM_TABLE)
+        style.configure("custom.Treeview", font=self.FONT_SMALL_TABLE, rowheight=35)
+
+    def get_month_options(self):
+        """Returns a list of months available in the database for selecting."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(""" SELECT DISTINCT substr(date_of_activation, 4, 7) FROM members WHERE date_of_activation IS NOT NULL ORDER BY date_of_activation DESC """)
+                months = [row[0] for row in cursor.fetchall() if row[0] is not None]
+
+                formatted_months = [datetime.strptime(month, "%m-%Y").strftime("%B %Y") for month in months]
+                return formatted_months
+
+        except sqlite3.Error as e:
+            messagebox.showerror("Database Error",
+            f"An error occurred while retrieving month options: {str(e)}")
+            return []
 
     def populate_treeview(self):
+        """Populates the Treeview widget with member data based on the selected month filter."""
         try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            selected_month_display = self.selected_month.get()
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                selected_month_display = self.selected_month.get()
 
-            if selected_month_display != "No Data Available":
-                selected_month_db = datetime.strptime(selected_month_display, "%B %Y").strftime("%Y-%m")
+                if selected_month_display != "No Data Available":
 
-                cursor.execute( """SELECT id, name, age, gender, phone_number,
-                duration, fees, payment_method, date_of_activation,expiration_date,
-                status FROM members WHERE strftime('%Y-%m', date_of_activation) = ?""",(selected_month_db,))
+                    selected_month_db = datetime.strptime(selected_month_display, "%B %Y").strftime("%m-%Y")
 
-            else:
-                cursor.execute("""SELECT id, name, age, gender, phone_number,
-                duration, fees, payment_method, date_of_activation, expiration_date, status FROM members""")
+                    query = """ SELECT id, name, age, gender, phone_number,
+                                duration, fees, payment_method, date_of_activation,
+                                expiration_date, status FROM members 
+                                WHERE substr(date_of_activation, 4, 7) = ? """
+                    cursor.execute(query, (selected_month_db,))
 
-            rows = cursor.fetchall()
-            conn.close()
+                else:
+                    query = """ SELECT id, name, age, gender, phone_number,
+                            duration, fees, payment_method, date_of_activation,
+                            expiration_date, status FROM members """
+                    cursor.execute(query)
 
-            for item in self.tree.get_children():
-                self.tree.delete(item)
-            for row in rows:
-                self.tree.insert("", tk.END, values=row)
+                rows = cursor.fetchall()
+                
+                if rows:
+                    self.tree.delete(*self.tree.get_children()) 
+                    for row in rows:
+                        self.tree.insert("", tk.END, values=row)
+
+        except sqlite3.Error as e:
+            messagebox.showerror("Database Error", f"Failed to retrieve member data.\nDetails: {str(e)}")
+
+    def search_members(self):
+        """Search for members based on the name input."""
+        search_query = self.search_box.get().strip()
+
+        if search_query == "Enter member name to search" or not search_query:
+            messagebox.showwarning("Input Required",
+            "Please enter a member name in the search field before proceeding.")
+            return
+        
+        if len(search_query) < 3:
+            messagebox.showwarning("Input Required",
+            "Please enter at least 3 characters in the search field before proceeding.")
+            return
+
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+
+                cursor.execute(""" SELECT id, name, age, gender, phone_number,duration, fees, payment_method, date_of_activation, expiration_date, status FROM members WHERE name LIKE ? """,
+                (f"%{search_query}%",))
+
+                rows = cursor.fetchall()
+
+                if not rows:
+                    messagebox.showinfo("No Results Found","We couldn't find any matches for your search.")
+                    return
+                
+                self.tree.delete(*self.tree.get_children()) 
+                for row in rows:
+                    self.tree.insert("", tk.END, values=row)
 
         except sqlite3.Error as e:
             messagebox.showerror("Database Error", f"An error occurred: {str(e)}")
 
+    def clear_placeholder(self, event, placeholder_text):
+        """Clear placeholder text when focus is on the entry."""
+        if self.search_box.get() == placeholder_text:
+            self.search_box.delete(0, tk.END)
+            self.search_box.config(fg="black")
+
+    def add_placeholder(self, event, placeholder_text):
+        """Add placeholder text when entry is empty and focus is lost."""
+        if self.search_box.get() == "":
+            self.search_box.insert(0, placeholder_text)
+            self.search_box.config(fg="gray")
+            
     def update_record(self):
         selected_items = self.tree.selection()
 
         if not selected_items:
-            messagebox.showerror("Update Error", "Please select a record to update before proceeding.")
+            messagebox.showwarning("Input Warning", "Please select a record to update before proceeding.")
         else:
             selected_item = self.tree.item(selected_items[0])
             self.show_update_member(selected_item)
@@ -3868,9 +3924,9 @@ class GymManagerApp:
             "Gender:",
             "Status:",
             "Date of Activation:",
-            "Membership Duration (months):",
-            "Membership Fees (Rs):",
-            "Payment Method:"]
+            "Membership Duration:",
+            "Membership Fees: Rs",
+            "Payment Method:" ]
 
         for i, text in enumerate(labels):
             tk.Label(self.member_window, font=self.FONT_MEDIUM, text=text).grid(row=i,
@@ -3886,7 +3942,6 @@ class GymManagerApp:
             validate="key",
             validatecommand=vcmd_text)
         self.entry_name.grid(row=0, column=1, padx=(0, 10))
-        self.entry_name.focus()
 
         self.entry_number = tk.Entry(
             self.member_window,
@@ -3896,7 +3951,7 @@ class GymManagerApp:
             validatecommand=vcmd_numeric)
         self.entry_number.grid(row=1, column=1, padx=(0, 10))
 
-        age_options = [str(i) for i in range(1, 101)]
+        age_options = [str(i) for i in range(10, 101)]
         self.age_choice = tk.StringVar(self.member_window)
         self.age_choice.set("Select")
         age_menu = tk.OptionMenu(self.member_window, self.age_choice, *age_options)
@@ -3918,12 +3973,12 @@ class GymManagerApp:
         self.date_of_activation_entry = DateEntry(
             self.member_window,
             font=self.FONT_SMALL,
-            date_pattern="yyyy-MM-dd",
+            date_pattern="dd-MM-yyyy",
             mindate=one_month_back)
         self.date_of_activation_entry.grid(row=5, column=1, sticky=tk.W)
         self.date_of_activation_entry.bind("<KeyPress>", lambda event: "break")
 
-        duration_options = [f"{i} months" for i in range(1, 13)]
+        duration_options = [f"{i} month" if i == 1 else f"{i} month's" for i in range(1, 13)]
         self.duration_choice = tk.StringVar(self.member_window)
         self.duration_choice.set("Select")
         duration_menu = tk.OptionMenu(self.member_window, self.duration_choice, *duration_options)
@@ -3951,12 +4006,15 @@ class GymManagerApp:
             font=self.FONT_SMALL,
             bg=self.GREEN_BG_COLOR,
             fg=self.FG_COLOR)
-        submit_button.grid(row=9, column=0, columnspan=2, pady=10 ,ipadx=self.button_pading)
+        submit_button.grid(row=9, column=0, columnspan=2, pady=10 ,ipadx=self.button_padding)
 
         submit_button.bind("<Enter>", lambda event: self.on_hover(event, is_enter=True))
         submit_button.bind("<Leave>", lambda event: self.on_hover(event, is_enter=False))
 
     def update_member(self, item):
+        formatted_date = self.date_of_activation_entry.get_date().strftime("%d-%m-%Y")
+        formatted_fees = "Rs "+ self.entry_fees.get()
+ 
         updated_values = (
             item["values"][0],
             self.entry_name.get(),
@@ -3964,91 +4022,84 @@ class GymManagerApp:
             self.gender.get(),
             self.entry_number.get(),
             self.duration_choice.get(),
-            "Rs " + self.entry_fees.get(),
+            formatted_fees,
             self.payment_method.get(),
             self.status_choice.get(),
-            self.date_of_activation_entry.get_date())
+            formatted_date )
+
+        if any(str(field).strip() == "" for field in updated_values[1:]) or not self.entry_fees.get().strip():
+            messagebox.showwarning("Input Required", "Please ensure all required fields are filled out before proceeding.")
+            return
 
         try:
-            if (any(field.strip() == "" for field in updated_values[1:9])or not self.entry_fees.get().strip()):
-                messagebox.showwarning("Input Warning","Please ensure all required fields are filled out before proceeding.")
-                return
-
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            cursor.execute(""" UPDATE members SET name=?, age=?, gender=?,
-            phone_number=?, duration=?, fees=?,payment_method=?, status=?,
-            date_of_activation=? WHERE id=? """,(*updated_values[1:], updated_values[0]))
-            conn.commit()
-            conn.close()
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(""" UPDATE members SET name=?, age=?, gender=?, phone_number=?, duration=?, fees=?, payment_method=?, status=?, date_of_activation=? WHERE id=? """,
+                (*updated_values[1:], updated_values[0]))
+                conn.commit()
+            
             self.populate_treeview()
             self.member_window.destroy()
             messagebox.showinfo("Success", "Member updated successfully.")
 
         except sqlite3.Error as e:
             messagebox.showerror("Database Error", f"An error occurred: {str(e)}")
-            return
-
-        except Exception as e:
-            messagebox.showerror("Updation Error", 
-            f"Unable to update member information.\nPlease try again. Error: {str(e)}")
-            return
 
     def delete_record(self):
-        selected_items = self.tree.selection()
+        selected_item = self.tree.selection()
 
-        if not selected_items:
-            messagebox.showerror("Deletion Error", "Please select a record before attempting to delete.")
-        else:
-            confirm = messagebox.askyesno("Confirm Deletion", 
-            "Are you sure you want to delete this member?\nThis action cannot be undone.")
+        if not selected_item:
+            messagebox.showwarning("Input Warning", "Please select a record before attempting to delete.")
+            return
 
-            if confirm:
-                selected_item = self.tree.item(selected_items[0])
-                record_id = selected_item["values"][0]
+        if messagebox.askyesno("Confirm Deletion","Are you sure you want to delete this member?\nThis action cannot be undone."):
+            record_id = self.tree.item(selected_item[0], "values")[0]
 
-                try:
-                    conn = sqlite3.connect(self.db_path)
+            try:
+                with sqlite3.connect(self.db_path) as conn:
                     cursor = conn.cursor()
                     cursor.execute("DELETE FROM members WHERE id=?", (record_id,))
                     conn.commit()
-                    conn.close()
-                    self.populate_treeview()
-                    messagebox.showinfo("Success", "Member deleted successfully.")
 
-                except sqlite3.Error as e:
-                    messagebox.showerror("Database Error", f"An error occurred: {str(e)}")
+                self.populate_treeview()
+                messagebox.showinfo("Success", "Member deleted successfully.")
+
+            except sqlite3.Error as e:
+                messagebox.showerror("Database Error", f"An error occurred: {e}")
 
     def on_click(self, event):
-        """Event handler for clicking on a row in the treeview."""
+        """Event handler for clicking on a specific cell in the treeview (column #2)."""
         try:
             col = self.tree.identify_column(event.x)
             item = self.tree.identify_row(event.y)
-            if not item or not col or col != "#2":
+
+            if not item or col != "#2":
                 return
-            col_index = 1
-            cell_data = self.tree.item(item, "values")[col_index]
+
+            cell_data = self.tree.item(item, "values")[1]
             self.show_tooltip(cell_data)
+
         except IndexError:
             pass
         except Exception as e:
-            messagebox.showerror("Selection Error",f"An unexpected error occurred while processing your selection.\nError details: {str(e)}")
+            messagebox.showerror("Selection Error", 
+            f"An unexpected error occurred while processing your selection.\nError details: {str(e)}")
 
     def show_tooltip(self, text):
-        """Displays a tooltip with the provided content near the selected row in the treeview."""
+        """Displays a tooltip near the selected row in the treeview with the provided content."""
         try:
-
-            if (hasattr(self, "tooltip")and isinstance(self.tooltip, tk.Toplevel)
-            and self.tooltip.winfo_exists()):
+            if hasattr(self, "tooltip"):
                 self.tooltip.destroy()
 
-            x, y, _, _ = self.tree.bbox(self.tree.focus())
-
+            selected_item = self.tree.focus()
+            x, y, width, height = self.tree.bbox(selected_item)
+            
             if x and y:
                 self.tooltip = tk.Toplevel(self.root)
-                self.tooltip.resizable(False, False)
-                self.tooltip.geometry("400x50+120+45")
                 self.tooltip.wm_overrideredirect(True)
+                self.tooltip.geometry("400x50+150+45")
+                self.tooltip.configure(bg="yellow")
+
                 text_widget = tk.Label(
                     self.tooltip,
                     text=text,
@@ -4056,10 +4107,12 @@ class GymManagerApp:
                     font=self.FONT_MEDIUM,
                     anchor="w")
                 text_widget.pack(fill=tk.BOTH, expand=True)
+
                 self.tooltip.after(5000, self.tooltip.destroy)
 
         except Exception as e:
-            messagebox.showerror("Tooltip Error",f"An error occurred while trying to display the tooltip.\nError details: {str(e)}")
+            messagebox.showerror("Tooltip Error",
+            f"An error occurred while trying to display the tooltip.\nError details: {str(e)}")
 
     def show_gym_accounts(self):
         """Display Gym Accounts information."""
@@ -4076,8 +4129,8 @@ class GymManagerApp:
         accounts_frame.grid_rowconfigure(0, weight=1)
         
         self.create_month_selection()
-        self.view_inactive_members()
         self.view_monthly_members()
+        self.view_inactive_members()
 
     def create_month_selection(self):
         """Create a dropdown for selecting month and a button to view members."""
@@ -4104,25 +4157,15 @@ class GymManagerApp:
 
         view_month_button = tk.Button(
             section_frame,
-            text="🔗 View Members",
+            text="View Members",
             font=self.FONT_SMALL,
             bg=self.BG_COLOR,
             fg=self.FG_COLOR,
             command=self.view_monthly_members)
-        view_month_button.grid(row=1, column=0, columnspan=2, pady=10,ipadx=self.button_pading)
+        view_month_button.grid(row=1, column=0, columnspan=2, pady=10,ipadx=self.button_padding)
 
         view_month_button.bind("<Enter>", lambda event: self.on_hover(event, is_enter=True))
         view_month_button.bind("<Leave>", lambda event: self.on_hover(event, is_enter=False))
-
-    def get_month_options(self):
-        """Returns a list of months available in the database for selecting."""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute("SELECT DISTINCT strftime('%Y-%m', date_of_activation) FROM members ORDER BY date_of_activation DESC")
-        months = [row[0] for row in cursor.fetchall()]
-        conn.close()
-        formatted_months = [datetime.strptime(month, "%Y-%m").strftime("%B %Y") for month in months]
-        return formatted_months
 
     def view_monthly_members(self):
         """Displays the active and inactive members for the selected month."""
@@ -4130,32 +4173,33 @@ class GymManagerApp:
 
         if selected_month == "No Data Available":
             return
-            
-        month_year = datetime.strptime(selected_month, "%B %Y").strftime("%Y-%m")
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute("""SELECT COUNT(*) AS total_count, 
-        COALESCE(SUM(CAST(REPLACE(fees, 'Rs', '') AS REAL)), 0)
-        AS total_fees FROM members WHERE strftime('%Y-%m', date_of_activation) = ?""",(month_year,))
 
-        new_members_details = cursor.fetchone() or (0, 0)
+        month_year = datetime.strptime(selected_month, "%B %Y").strftime("%m-%Y")
 
-        cursor.execute("""SELECT COUNT(*) AS active_member_count FROM members WHERE status = 'Active'""")
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
 
-        active_member_count = cursor.fetchone()[0]
+                cursor.execute(""" SELECT COUNT(*) AS total_count, COALESCE(SUM(CAST(REPLACE(fees, 'Rs', '') AS REAL)), 0) AS total_fees, (SELECT COUNT(*) FROM members WHERE status = 'Active') AS active_member_count FROM members WHERE substr(date_of_activation, 4, 7) = ? """, (month_year,))
 
-        cursor.execute("""SELECT COUNT(*) FROM members WHERE status = 'Inactive' AND strftime('%Y-%m', expiration_date) = ?""",(month_year,))
+                new_members_details = cursor.fetchone() or (0, 0, 0)
+                total_count, total_fees, active_member_count = new_members_details
 
-        inactive_member_count = cursor.fetchone()[0] or 0
+                cursor.execute(""" SELECT COUNT(*) FROM members  WHERE status = 'Inactive' AND substr(expiration_date, 4, 7) = ? """, (month_year,))
 
-        conn.close()
+                inactive_member_count = cursor.fetchone()[0] or 0
+
+        except sqlite3.Error as e:
+            messagebox.showerror("Database Error",
+            f"An error occurred while retrieving member data: {str(e)}")
+            return
+
         self.clear_sections()
 
-        selected_month_display = ("Current Month" if selected_month == self.current_month else selected_month)
+        selected_month_display = "Current Month" if selected_month == self.current_month else selected_month
 
-        self.create_members_section(f"Members details for {selected_month_display}.", new_members_details,
-            active_member_count, inactive_member_count, 2)
-
+        self.create_members_section( f"Members details for {selected_month_display}.", (total_count, total_fees), active_member_count, inactive_member_count, 2)
+        
     def clear_sections(self):
         """Clear only the sections with 'Members details for'."""
         for widget in self.active_inactive_frame.winfo_children():
@@ -4180,14 +4224,14 @@ class GymManagerApp:
             section_frame,
             text=f"Members Added: {total_members} ➕",
             fg="#388E3C",
-            font=self.FONT_MEDIUM_Table)
+            font=self.FONT_MEDIUM_TABLE)
         total_label.grid(row=1, column=0, padx=10, pady=10)
 
         Total_fees_label = tk.Label(
             section_frame,
             text=f"Total Fees: Rs {total_fees} ⚡",
             fg="#FFB300",
-            font=self.FONT_MEDIUM_Table)
+            font=self.FONT_MEDIUM_TABLE)
         Total_fees_label.grid(row=2, column=0, padx=10, pady=10)
 
         if "Members details for Current Month." in title:
@@ -4195,14 +4239,14 @@ class GymManagerApp:
                 section_frame,
                 text=f"Active Members Till Now: {active_data} ☑️",
                 fg="#1976D2",
-                font=self.FONT_MEDIUM_Table)
+                font=self.FONT_MEDIUM_TABLE)
             active_label.grid(row=3, column=0, padx=10, pady=10)
 
             inactive_label = tk.Label(
                 section_frame,
                 text=f"Inactive Members: {inactive_data} ❎",
                 fg="#D32F2F",
-                font=self.FONT_MEDIUM_Table)
+                font=self.FONT_MEDIUM_TABLE)
             inactive_label.grid(row=4, column=0, padx=10, pady=10)
 
     def view_inactive_members(self):
@@ -4210,38 +4254,31 @@ class GymManagerApp:
         self.inner_frame = tk.Frame(self.Notification_frame)
         self.inner_frame.pack(fill=tk.BOTH, expand=True)
 
-        self.expiration_month = datetime.now().strftime("%Y-%m")
-        
+        self.expiration_month = datetime.now().strftime("%m-%Y")
+
         try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                cursor.execute(""" SELECT SUM(CASE WHEN notified = 'True' THEN 1 ELSE 0 END) AS true_count, SUM(CASE WHEN notified = 'False' THEN 1 ELSE 0 END) AS false_count FROM members WHERE status = 'Inactive' AND substr(expiration_date, 4, 7) = ? """, (self.expiration_month,))
 
-            cursor.execute("""
-                SELECT 
-                    SUM(CASE WHEN notified = 'True' THEN 1 ELSE 0 END) AS true_count,
-                    SUM(CASE WHEN notified = 'False' THEN 1 ELSE 0 END) AS false_count
-                FROM members 
-                WHERE status = 'Inactive' 
-                AND strftime('%Y-%m', expiration_date) = ? """, (self.expiration_month,))
+                result = cursor.fetchone()
+                true_count, false_count = (0, 0) if result == (None, None) else result
 
-            result = cursor.fetchone()
-            true_count, false_count = (0, 0) if result == (None, None) else result
-            conn.close()
+                cursor.execute(""" SELECT id, name, phone_number, duration, expiration_date FROM members WHERE status = 'Inactive' AND substr(expiration_date, 4, 7) = ?""", (self.expiration_month,))
+                rows = cursor.fetchall()
 
         except sqlite3.Error as e:
             messagebox.showerror("Database Error", f"An error occurred: {str(e)}")
+            return
 
         top_frame = tk.Frame(self.inner_frame)
         top_frame.pack(fill=tk.X, padx=20, pady=10)
 
-        title_label = tk.Label(top_frame, text="Inactive Members Details", font=self.FONT_MEDIUM)
-        title_label.pack(anchor=tk.CENTER)
+        tk.Label(top_frame, text="Inactive Members Details", font=self.FONT_MEDIUM).pack(anchor=tk.CENTER)
 
-        notified_label = tk.Label(top_frame, text=f"Notified: {true_count} ✅", font=self.FONT_SMALL, fg="#76FF03")
-        notified_label.pack(side=tk.RIGHT, padx=(10, 0))
-
-        not_notified_label = tk.Label(top_frame, text=f"Unnotified: {false_count} ❎", font=self.FONT_SMALL, fg="#00B0FF")
-        not_notified_label.pack(side=tk.RIGHT)
+        tk.Label(top_frame, text=f"Notified: {true_count} ✅", font=self.FONT_SMALL, fg="#76FF03").pack(side=tk.RIGHT, padx=(10, 0))
+        tk.Label(top_frame, text=f"Unnotified: {false_count} ❎", font=self.FONT_SMALL, fg="#00B0FF").pack(side=tk.RIGHT)
 
         self.tree = ttk.Treeview(
             self.inner_frame,
@@ -4265,22 +4302,8 @@ class GymManagerApp:
         self.tree.column("duration", width=50, anchor="center")
         self.tree.column("Inactivation_date", width=120, anchor="center")
 
-        try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            cursor.execute("""SELECT id, name, phone_number , duration, expiration_date
-            FROM members WHERE status = 'Inactive' AND strftime('%Y-%m', expiration_date) = ?""",
-            (self.expiration_month,))
-            rows = cursor.fetchall()
-            conn.close()
-
-            for item in self.tree.get_children():
-                self.tree.delete(item)
-            for row in rows:
-                self.tree.insert("", tk.END, values=row)
-
-        except sqlite3.Error as e:
-            messagebox.showerror("Database Error", f"An error occurred: {str(e)}")
+        for row in rows:
+            self.tree.insert("", tk.END, values=row)
 
         scrollbar = ttk.Scrollbar(self.inner_frame, orient=tk.VERTICAL, command=self.tree.yview)
         self.tree.configure(yscroll=scrollbar.set)
@@ -4290,264 +4313,58 @@ class GymManagerApp:
         base_frame = tk.Frame(self.Notification_frame)
         base_frame.pack(pady=10, anchor=tk.CENTER)
 
-        alert_button = tk.Button(
-            base_frame,
-            bg=self.RED_BG_COLOR,
-            fg=self.FG_COLOR,
-            font=self.FONT_SMALL,
-            text="⚠️ Alert",
-            command=self.send_whatsapp_message,
-        )
-        alert_button.pack(side=tk.LEFT, ipadx=self.button_pading)
+        alert_button = tk.Button(base_frame, bg=self.RED_BG_COLOR, fg=self.FG_COLOR, font=self.FONT_SMALL, text="⚠️ Alert", command=self.send_whatsapp_message)
+        alert_button.pack(side=tk.LEFT, ipadx=self.button_padding)
 
-        update_button = tk.Button(
-            base_frame,
-            bg=self.GREEN_BG_COLOR,
-            fg=self.FG_COLOR,
-            font=self.FONT_SMALL,
-            text="⬆️ Update",
-            command=self.update_inactive,
-        )
-        update_button.pack(side=tk.RIGHT, padx=20, ipadx=self.button_pading)
+        update_button = tk.Button(base_frame, bg=self.GREEN_BG_COLOR, fg=self.FG_COLOR, font=self.FONT_SMALL, text="⬆️ Update", command=self.update_inactive)
+        update_button.pack(side=tk.RIGHT, padx=20, ipadx=self.button_padding)
 
-        alert_button.bind("<Enter>", lambda event: self.on_hover(event, is_enter=True))
-        alert_button.bind("<Leave>", lambda event: self.on_hover(event, is_enter=False))
-        update_button.bind("<Enter>", lambda event: self.on_hover(event, is_enter=True))
-        update_button.bind("<Leave>", lambda event: self.on_hover(event, is_enter=False))
+        for button in (alert_button, update_button):
+            button.bind("<Enter>", lambda event: self.on_hover(event, is_enter=True))
+            button.bind("<Leave>", lambda event: self.on_hover(event, is_enter=False))
 
         self.tree.bind("<Double-1>", self.on_click)
 
         self.style = ttk.Style()
-        self.style.configure("Custom.Treeview.Heading", font=self.FONT_MEDIUM_Table)
-        self.style.configure("Custom.Treeview", font=self.FONT_SMALL_Table, rowheight=31)
-
-    def update_inactive(self):
-        selected_items = self.tree.selection()
-        if not selected_items:
-            messagebox.showerror("Update Error", "Please select a record to update before proceeding.")
-        else:
-            selected_item = self.tree.item(selected_items[0])
-            self.show_update_inactive(selected_item)
-
-    def show_update_inactive(self, item):
-        """Display the update window for an inactive member's details."""
-        self.create_inactive_window("Update Inactive Details", lambda: self.update_inactive_member(item))
-        values = item["values"]
-        try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            cursor.execute("""SELECT name, phone_number, duration, fees, date_of_activation, status
-                FROM members WHERE id = ?""",(values[0],))
-            row = cursor.fetchone()
-            if row:
-                self.entry_name.insert(0, row[0])
-                self.entry_name.config(state=tk.DISABLED)
-                self.entry_number.insert(0, row[1])
-                self.entry_number.config(state=tk.DISABLED)
-                self.duration_choice.set(row[2])
-                fees_value = row[3].replace("Rs", "").strip()
-                self.entry_fees.insert(0, fees_value)
-                self.date_of_activation_entry.config(state=tk.NORMAL)
-                self.date_of_activation_entry.delete(0, tk.END)
-                self.date_of_activation_entry.insert(0, row[4])
-                self.status_choice.set(row[5])
-            else:
-                messagebox.showerror("Member Not Found", 
-                "Sorry, we couldn't find the member.\nPlease verify the details and search again.")
-
-        except sqlite3.Error as e:
-            messagebox.showerror("Database Error", f"An error occurred: {str(e)}")
-        finally:
-            conn.close()
-
-    def create_inactive_window(self, title, submit_command):
-        self.member_window = tk.Toplevel(self.root)
-        self.member_window.title(title)
-        self.member_window.resizable(False, False)
-        self.member_window.geometry("+500+200")
-        self.member_window.grab_set()
-        self.member_window.focus()
-
-        labels = [
-            "Name:",
-            "Phone Number:",
-            "Status:",
-            "Date of Activation:",
-            "Membership Duration (months):",
-            "Membership Fees (Rs):"]
-        
-        for i, text in enumerate(labels):
-            tk.Label(self.member_window, font=self.FONT_MEDIUM, text=text).grid(row=i,
-            column=0, pady=10, padx=(10, 0), sticky=tk.E)
-            
-        vcmd_numeric = (self.member_window.register(self.validate_input), "%P", "numeric")
-
-        self.entry_name = tk.Entry(
-            self.member_window,
-            font=self.FONT_SMALL_INPUT,
-            validate="key",
-            justify="center")
-        self.entry_name.grid(row=0, column=1, padx=(0, 10), sticky=tk.W)
-
-        self.entry_number = tk.Entry(
-            self.member_window,
-            font=self.FONT_SMALL_INPUT,
-            validate="key",
-            justify="center")
-        self.entry_number.grid(row=1, column=1, padx=(0, 10), sticky=tk.W)
-
-        self.status_choice = tk.StringVar(value="Select")
-        status_menu = tk.OptionMenu(self.member_window, self.status_choice, "Active", "Inactive")
-        status_menu.config(bg=self.BG_COLOR, fg=self.FG_COLOR, font=self.FONT_SMALL)
-        status_menu.grid(row=2, column=1, sticky=tk.W)
-        self.status_choice.trace_add("write", lambda *args: self.update_date_entry_state())
-
-        date_back = date.today() - timedelta(days=5)
-        self.date_of_activation_entry = DateEntry(
-            self.member_window,
-            font=self.FONT_SMALL,
-            date_pattern="yyyy-MM-dd",
-            mindate=date_back)
-        self.date_of_activation_entry.grid(row=3, column=1, sticky=tk.W)
-        self.date_of_activation_entry.bind("<KeyPress>", lambda event: "break")
-
-        duration_options = [f"{i} months" for i in range(1, 13)]
-        self.duration_choice = tk.StringVar(value="Select")
-        duration_menu = tk.OptionMenu(self.member_window, self.duration_choice, *duration_options)
-        duration_menu.config(bg=self.BG_COLOR, fg=self.FG_COLOR, font=self.FONT_SMALL)
-        duration_menu.grid(row=4, column=1, sticky=tk.W)
-
-        self.entry_fees = tk.Entry(
-            self.member_window,
-            font=self.FONT_SMALL_INPUT,
-            validate="key",
-            validatecommand=vcmd_numeric,
-            width=10)
-        self.entry_fees.grid(row=5, column=1, sticky=tk.W)
-
-        submit_button = tk.Button(
-            self.member_window,
-            text="✅ Submit",
-            command=submit_command,
-            font=self.FONT_SMALL,
-            bg=self.GREEN_BG_COLOR,
-            fg=self.FG_COLOR)
-        submit_button.grid(row=6, column=0, columnspan=2, pady=10, ipadx=self.button_pading)
-
-        submit_button.bind("<Enter>", lambda event: self.on_hover(event, is_enter=True))
-        submit_button.bind("<Leave>", lambda event: self.on_hover(event, is_enter=False))
-
-    def update_date_entry_state(self):
-        status = self.status_choice.get()
-        if status == "Inactive":
-            self.date_of_activation_entry.config(state=tk.DISABLED)
-        else:
-            self.date_of_activation_entry.config(state=tk.NORMAL)
-
-    def update_inactive_member(self, item):
-        updated_values = (
-            item["values"][0],
-            self.duration_choice.get(),
-            "Rs " + self.entry_fees.get(),
-            self.status_choice.get(),
-            self.date_of_activation_entry.get_date())
-
-        try:
-            if (any(field.strip() == "" for field in updated_values[1:4])or not self.entry_fees.get().strip()):
-                messagebox.showwarning("Input Warning","Please ensure all required fields are filled out before proceeding.")
-                return
-
-            if updated_values[3] != "Active":
-                messagebox.showwarning("Activation Required", "Please activate the member before saving the details.")
-                return
-
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute(""" UPDATE members SET duration = ?, fees = ?, status = ?,
-                date_of_activation = ? WHERE id = ?""",(updated_values[1],updated_values[2],updated_values[3],updated_values[4],updated_values[0]))
-
-            self.member_window.destroy()
-            self.show_content("Gym Accounts")
-            messagebox.showinfo("Success", "Member activated successfully.")
-
-        except sqlite3.Error as e:
-            messagebox.showerror("Database Error", f"An error occurred: {str(e)}")
-            return
-
-        except Exception as e:
-            messagebox.showerror("Activation Error", 
-            f"Failed to activate the member.\nPlease try again. Error: {str(e)}")
-            return
+        self.style.configure("Custom.Treeview.Heading", font=self.FONT_MEDIUM_TABLE)
+        self.style.configure("Custom.Treeview", font=self.FONT_SMALL_TABLE, rowheight=30)
 
     def send_whatsapp_message(self):
         """Send WhatsApp messages to a list of users if logged in."""
         try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            cursor.execute("""SELECT id, name, phone_number, duration, expiration_date 
-            FROM members WHERE status = 'Inactive' AND strftime('%Y-%m', expiration_date) = ? 
-            AND notified = 'False'""",(self.expiration_month,))
-            rows = cursor.fetchall()
-            conn.close()
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(""" SELECT id, name, phone_number, duration, expiration_date FROM members WHERE status = 'Inactive' AND substr(expiration_date, 4, 7) = ? AND notified = 'False' """,
+                (self.expiration_month,))
+                rows = cursor.fetchall()
 
             if not rows:
-                messagebox.showinfo("No Members to Notify","All inactive members have already been notified.")
+                messagebox.showinfo("No Members to Notify", "All inactive members have already been notified.")
                 return
-            
+
             self.message_count = self.load_message_count()
             self.license_valid, expiration_date = self.load_license_key_status()
 
             if not self.license_valid and self.message_count >= 20:
-
-                if expiration_date is not None:
-                    message = (
-                        f"You have reached your limit of 20 free messages and your license key expired on {expiration_date}.\nTo restore full functionality, please enter a valid license key to continue using our services.")
-                else:
-                    message = ("You've reached your free limit of 20 messages.\nTo continue enjoying our services without interruption, please enter a valid license key.")
-
-                messagebox.showwarning("License Required", message)
-                self.create_license_key_interface()
+                self.handle_license_limit(expiration_date)
                 return 
-                
+
             if not self.is_whatsapp_logged_in():
-                messagebox.showerror("WhatsApp Login Error","WhatsApp Web is not logged in.\nPlease log in and try again.")
+                messagebox.showerror("WhatsApp Login Error", "WhatsApp Web is not logged in.\nPlease log in and try again.")
                 return
 
-            messages_sent = 0
-
-            for row in rows:
-                if not self.license_valid and self.message_count >= 20:
-                    break
-
-                if self.process_row_and_send_message(row):
-                    self.message_count += 1
-                    self.save_app_data(message_count=self.message_count)
-                    messages_sent += 1
-                else:
-                    self.root.deiconify()
-                    self.root.state("zoomed")
-                    return
-
-            self.root.deiconify()
-            self.root.state("zoomed")
+            messages_sent = self.process_and_send_messages(rows)
 
             if messages_sent == len(rows):
-                messagebox.showinfo("All Inactive Members Notified!","All inactive members have been successfully alerted about their membership status!")
+                messagebox.showinfo("All Inactive Members Notified!", "All inactive members have been successfully alerted about their membership status!")
                 self.show_content("Gym Accounts")
-
             else:
-                messagebox.showwarning("Message Limit Reached", "You've reached your free limit of 20 messages. \nPlease enter a valid license key to continue sending messages.")
-                self.create_license_key_interface()
+                self.handle_license_limit(expiration_date)
 
         except sqlite3.Error as e:
-            self.root.deiconify()
-            self.root.state("zoomed")
-            messagebox.showerror("Database Error", f"An error occurred: {str(e)}")
-        
+            self.handle_error("Database Error", f"An error occurred: {str(e)}")
         except Exception as e:
-            self.root.deiconify()
-            self.root.state("zoomed")
-            messagebox.showerror("Message Sending Error", 
+            self.handle_error("Message Sending Error",
             f"Failed to send messages.\nPlease try again. Error: {str(e)}")
 
     def load_message_count(self):
@@ -4555,32 +4372,112 @@ class GymManagerApp:
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
-                cursor.execute("SELECT message_count FROM app_data ORDER BY id DESC LIMIT 1")
+                cursor.execute(" SELECT message_count FROM app_data ORDER BY id DESC LIMIT 1 ")
                 result = cursor.fetchone()
             return result[0] if result else 0
         except sqlite3.Error as e:
             messagebox.showerror("Database Error", f"An error occurred: {str(e)}")
             return 0
-
+        
     def load_license_key_status(self):
         """Load the license key expiration date from the app_data table and check its validity."""
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
-                cursor.execute("SELECT license_key_expiration FROM app_data ORDER BY id DESC LIMIT 1")
+                cursor.execute(" SELECT license_key_expiration FROM app_data ORDER BY id DESC LIMIT 1 ")
                 result = cursor.fetchone()
             expiration_date_str = result[0] if result else None
 
             if expiration_date_str is None:
                 return False, None
                 
-            expiration_date = datetime.strptime(expiration_date_str, "%Y-%m-%d").date()
+            expiration_date = datetime.strptime(expiration_date_str, "%d-%m-%Y").date()
             is_valid = datetime.now().date() <= expiration_date
             return is_valid, expiration_date
 
         except sqlite3.Error as e:
             messagebox.showerror("Database Error", f"An error occurred: {str(e)}")
             return False, None
+
+    def handle_license_limit(self, expiration_date):
+        """Handle license limit notifications and prompt for key if necessary."""
+        if expiration_date is not None:
+            message = (f"""You have reached your limit of 20 free messages and your license key expired on {expiration_date}.\nTo restore full functionality, please enter a valid license key to continue using our services.""")
+        else:
+            message = "You've reached your free limit of 20 messages.\nTo continue enjoying our services without interruption, please enter a valid license key."
+
+        messagebox.showwarning("License Required", message)
+        self.create_license_key_interface()
+
+    def is_whatsapp_logged_in(self):
+        """Check if logged into WhatsApp Web and provide an option to stop."""
+        self.root.withdraw()
+        try:
+            self.open_whatsapp_web()
+            if messagebox.askyesno("WhatsApp Login", "Are you logged into WhatsApp Web?"):
+                return True
+            else:
+                self.root.deiconify()
+                self.root.state("zoomed")
+                return False
+        except Exception as e:
+            self.root.deiconify()
+            self.root.state("zoomed")
+            messagebox.showerror("Login Error", 
+            f"Login check failed.\nError details: {str(e)}")
+            return False
+        
+    def open_whatsapp_web(self):
+        """Open WhatsApp Web in a new window and wait for user confirmation."""
+        webbrowser.open("https://web.whatsapp.com/")
+        time.sleep(10)
+
+    def process_and_send_messages(self, rows):
+        """Process each message sending and return the count of messages sent."""
+        messages_sent = 0
+
+        for row in rows:
+            if not self.license_valid and self.message_count >= 20:
+                break
+            
+            member_id, name, phone_number, duration, expiration_date = row
+            
+            message = (
+                f"Hi {name} 🙏\n"
+                f"Your {duration} membership ended on {expiration_date} 🗓️\n"
+                "Please renew to keep enjoying our services! 😊\n"
+                "Thank you!" )
+            
+            phone_number_with_code = f"+91{phone_number}"
+
+            try:
+                self.kit.sendwhatmsg_instantly(phone_number_with_code, message, 20, True)
+                messages_sent += 1
+
+                with sqlite3.connect(self.db_path) as conn:
+                    cursor = conn.cursor()
+                    cursor.execute(" UPDATE members SET notified = 'True' WHERE id = ? ", (member_id,))
+                    
+                self.message_count += 1
+                self.save_app_data(message_count=self.message_count)
+
+            except Exception as e:
+                messagebox.showerror("Message Sending Error",
+                f"Failed to send message to {phone_number}.\nError details: {str(e)}")
+                self.root.deiconify()
+                self.root.state("zoomed")
+                return messages_sent
+
+        self.root.deiconify()
+        self.root.state("zoomed")
+
+        return messages_sent
+
+    def handle_error(self, title, message):
+        """Handle error messages and ensure the main window state is restored."""
+        self.root.deiconify()
+        self.root.state("zoomed")
+        messagebox.showerror(title, message)
 
     def create_license_key_interface(self):
         """Create the license key entry interface and display license expiration message."""
@@ -4618,10 +4515,10 @@ class GymManagerApp:
             buttons_frame,
             text="🚀 Validate",
             font=self.FONT_SMALL,
-            bg=self.BLUE_BG_COLOUR,
+            bg=self.BLUE_BG_COLOR,
             fg=self.FG_COLOR,
             command=lambda: self.check_license_key(self.license_entry.get()))
-        validate_button.pack(side=tk.LEFT, ipadx=self.button_pading)
+        validate_button.pack(side=tk.LEFT, ipadx=self.button_padding)
 
         Cancel_button = tk.Button(
             buttons_frame,
@@ -4630,63 +4527,11 @@ class GymManagerApp:
             bg=self.RED_BG_COLOR,
             fg=self.FG_COLOR,
             command=lambda: self.show_content("Gym Accounts"))
-        Cancel_button.pack(side=tk.RIGHT, padx=20, ipadx=self.button_pading)
+        Cancel_button.pack(side=tk.RIGHT, padx=20, ipadx=self.button_padding)
 
-        validate_button.bind("<Enter>", lambda event: self.on_hover(event, is_enter=True))
-        validate_button.bind("<Leave>", lambda event: self.on_hover(event, is_enter=False))
-        Cancel_button.bind("<Enter>", lambda event: self.on_hover(event, is_enter=True))
-        Cancel_button.bind("<Leave>", lambda event: self.on_hover(event, is_enter=False))
-
-    def is_whatsapp_logged_in(self):
-        """Check if logged into WhatsApp Web and provide an option to stop."""
-        self.root.withdraw()
-        try:
-            self.open_whatsapp_web()
-            if messagebox.askyesno("WhatsApp Login", "Are you logged into WhatsApp Web?"):
-                return True
-            else:
-                self.root.deiconify()
-                self.root.state("zoomed")
-                return False
-        except Exception as e:
-            self.root.deiconify()
-            self.root.state("zoomed")
-            messagebox.showerror("Login Error", f"Login check failed.\nError details: {str(e)}")
-            return False
-
-    def open_whatsapp_web(self):
-        """Open WhatsApp Web in a new window and wait for user confirmation."""
-        webbrowser.open("https://web.whatsapp.com/")
-        time.sleep(10)
-
-    def process_row_and_send_message(self, row):
-        """Process each row of data and send a message."""
-        member_id, name, phone_number, duration, expiration_date = row
-
-        message = (
-            f"Hi {name} 🙏\n"
-            f"Your {duration} membership ended on {expiration_date} 🗓️\n"
-            "Please renew to keep enjoying our services! 😊\n"
-            "Thank you!")
-
-        phone_number_with_code = f"+91{phone_number}"
-
-        if self.send_message(phone_number_with_code, message):
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute("UPDATE members SET notified = 'True' WHERE id = ?", (member_id,))
-            return True
-        return False
-
-    def send_message(self, phone_number, message):
-        """Send a WhatsApp message and handle errors."""
-        try:
-            self.kit.sendwhatmsg_instantly(phone_number, message, 20, True)
-            return True
-        except Exception as e:
-            messagebox.showerror("Message Sending Error",
-            f"Failed to send message to {phone_number}.\nError details: {str(e)}")
-            return False
+        for button in(validate_button, Cancel_button):
+            button.bind("<Enter>", lambda event: self.on_hover(event, is_enter=True))
+            button.bind("<Leave>", lambda event: self.on_hover(event, is_enter=False))
 
     def process_license_key(self, event):
         """Validate and format the license key with '-' after every 4 characters, allowing only alphanumeric characters."""
@@ -4722,14 +4567,16 @@ class GymManagerApp:
                 messagebox.showerror("License Data Error",
                 "Some required information is missing from the license data.\nPlease contact support for assistance to resolve this issue.")
                 return
+            
             matching_license = df[df["License Key"].str.strip() == license_key.strip()]
 
             if matching_license.empty:
                 messagebox.showerror("License Key Not Found",
                 f"Oops!\n\nThe license key '{license_key}' you entered was not found in our records.\n\nPlease double-check and try again or contact support if you need assistance.")
                 return
+            
             expiration_date_str = matching_license.iloc[0]["Expiration Date"].strip()
-            expiration_date = datetime.strptime(expiration_date_str, "%Y-%m-%d").date()
+            expiration_date = datetime.strptime(expiration_date_str, "%d-%m-%Y").date()
             current_date = datetime.now().date()
 
             if current_date <= expiration_date:
@@ -4743,29 +4590,190 @@ class GymManagerApp:
 
         except requests.exceptions.RequestException as e:
             messagebox.showerror("License Fetch Error",
-            f"An issue occurred while fetching the license from GitHub.\n\nPlease ensure you have internet access and try again.\n\nError details: {str(e)}")
+            f"An issue occurred while fetching the license.\n\nPlease ensure you have internet access and try again.\n\nError details: {str(e)}")
 
         except Exception as e:
             messagebox.showerror("Unexpected Error",
             f"Something went wrong.\n\nPlease restart the application or try again.\n\nError: {str(e)}")
-
+            
     def save_app_data(self, message_count=None, license_key_expiration=None):
         """Save the message count and license_key_expiration to the app_data table."""
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
-                cursor.execute("SELECT id FROM app_data LIMIT 1")
+                cursor.execute(" SELECT id FROM app_data LIMIT 1 ")
                 exists = cursor.fetchone()
 
                 if exists:
-                    cursor.execute("""UPDATE app_data SET message_count = COALESCE(?, message_count),license_key_expiration  = COALESCE(?, license_key_expiration) WHERE id = ?""",(message_count, license_key_expiration, exists[0]))
+                    cursor.execute(""" UPDATE app_data SET message_count = COALESCE(?, message_count),license_key_expiration  = COALESCE(?, license_key_expiration) WHERE id = ? """,(message_count, license_key_expiration, exists[0]))
                 else:
-                    cursor.execute("""INSERT INTO app_data (message_count, license_key_expiration) 
-                    VALUES (?, ?)""",(message_count, license_key_expiration))
+                    cursor.execute(""" INSERT INTO app_data (message_count, license_key_expiration) 
+                    VALUES (?, ?) """,(message_count, license_key_expiration))
                 conn.commit()
                 
         except sqlite3.Error as e:
             messagebox.showerror("Database Error", f"An error occurred: {str(e)}")
+
+    def update_inactive(self):
+        selected_items = self.tree.selection()
+        if not selected_items:
+            messagebox.showwarning("Input Warning", "Please select a record to update before proceeding.")
+        else:
+            selected_item = self.tree.item(selected_items[0])
+            self.show_update_inactive(selected_item)
+
+    def show_update_inactive(self, item):
+        """Display the update window for an inactive member's details."""
+        self.create_inactive_window("Update Inactive Details", lambda: self.update_inactive_member(item))
+        
+        values = item["values"]
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(""" SELECT name, phone_number, duration, fees, date_of_activation, status FROM members WHERE id = ? """, (values[0],))
+                row = cursor.fetchone()
+
+            if row:
+                self.entry_name.insert(0, row[0])
+                self.entry_name.config(state=tk.DISABLED)
+                self.entry_number.insert(0, row[1])
+                self.entry_number.config(state=tk.DISABLED)
+                self.duration_choice.set(row[2])
+                fees_value = row[3].replace("Rs", "").strip()
+                self.entry_fees.insert(0, fees_value)
+                self.date_of_activation_entry.config(state=tk.NORMAL)
+                self.date_of_activation_entry.delete(0, tk.END)
+                self.date_of_activation_entry.insert(0, row[4])
+                self.status_choice.set(row[5])
+            else:
+                messagebox.showerror("Member Not Found", 
+                "Sorry, we couldn't find the member.\nPlease verify the details and search again.")
+        except sqlite3.Error as e:
+            messagebox.showerror("Database Error", f"An error occurred: {str(e)}")
+
+    def create_inactive_window(self, title, submit_command):
+        self.member_window = tk.Toplevel(self.root)
+        self.member_window.title(title)
+        self.member_window.resizable(False, False)
+        self.member_window.geometry("+500+200")
+        self.member_window.grab_set()
+        self.member_window.focus()
+
+        labels = [
+            "Name:",
+            "Phone Number:",
+            "Status:",
+            "Date of Activation:",
+            "Membership Duration:",
+            "Membership Fees:Rs"]
+        
+        for i, text in enumerate(labels):
+            tk.Label(self.member_window, font=self.FONT_MEDIUM, text=text).grid(row=i,
+            column=0, pady=10, padx=(10, 0), sticky=tk.E)
+            
+        vcmd_numeric = (self.member_window.register(self.validate_input), "%P", "numeric")
+
+        self.entry_name = tk.Entry(
+            self.member_window,
+            font=self.FONT_SMALL_INPUT,
+            validate="key",
+            justify="center")
+        self.entry_name.grid(row=0, column=1, padx=(0, 10), sticky=tk.W)
+
+        self.entry_number = tk.Entry(
+            self.member_window,
+            font=self.FONT_SMALL_INPUT,
+            validate="key",
+            justify="center")
+        self.entry_number.grid(row=1, column=1, padx=(0, 10), sticky=tk.W)
+
+        self.status_choice = tk.StringVar(value="Select")
+        status_menu = tk.OptionMenu(self.member_window, self.status_choice, "Active", "Inactive")
+        status_menu.config(bg=self.BG_COLOR, fg=self.FG_COLOR, font=self.FONT_SMALL)
+        status_menu.grid(row=2, column=1, sticky=tk.W)
+        self.status_choice.trace_add("write", lambda *args: self.update_date_entry_state())
+
+        date_back = date.today() - timedelta(days=5)
+        self.date_of_activation_entry = DateEntry(
+            self.member_window,
+            font=self.FONT_SMALL,
+            date_pattern="dd-MM-yyyy",
+            mindate=date_back)
+        self.date_of_activation_entry.grid(row=3, column=1, sticky=tk.W)
+        self.date_of_activation_entry.bind("<KeyPress>", lambda event: "break")
+
+        duration_options = [f"{i} month" if i == 1 else f"{i} month's" for i in range(1, 13)]
+        self.duration_choice = tk.StringVar(value="Select")
+        duration_menu = tk.OptionMenu(self.member_window, self.duration_choice, *duration_options)
+        duration_menu.config(bg=self.BG_COLOR, fg=self.FG_COLOR, font=self.FONT_SMALL)
+        duration_menu.grid(row=4, column=1, sticky=tk.W)
+
+        self.entry_fees = tk.Entry(
+            self.member_window,
+            font=self.FONT_SMALL_INPUT,
+            validate="key",
+            validatecommand=vcmd_numeric,
+            width=10)
+        self.entry_fees.grid(row=5, column=1, sticky=tk.W)
+
+        submit_button = tk.Button(
+            self.member_window,
+            text="✅ Submit",
+            command=submit_command,
+            font=self.FONT_SMALL,
+            bg=self.GREEN_BG_COLOR,
+            fg=self.FG_COLOR)
+        submit_button.grid(row=6, column=0, columnspan=2, pady=10, ipadx=self.button_padding)
+
+        submit_button.bind("<Enter>", lambda event: self.on_hover(event, is_enter=True))
+        submit_button.bind("<Leave>", lambda event: self.on_hover(event, is_enter=False))
+
+    def update_date_entry_state(self):
+        status = self.status_choice.get()
+        if status == "Inactive":
+            self.date_of_activation_entry.config(state=tk.DISABLED)
+        else:
+            self.date_of_activation_entry.config(state=tk.NORMAL)
+
+    def update_inactive_member(self, item):
+        formatted_date = self.date_of_activation_entry.get_date().strftime("%d-%m-%Y")
+        formatted_fees = "Rs "+ self.entry_fees.get()
+
+        updated_values = (
+            item["values"][0],
+            self.duration_choice.get(),
+            formatted_fees,
+            self.status_choice.get(),
+            formatted_date)
+        
+        if any(str(field).strip() == "" for field in updated_values[1:]) or not self.entry_fees.get().strip():
+            messagebox.showwarning("Input Required","Please ensure all required fields are filled out before proceeding.")
+            return
+
+        if updated_values[3] != "Active":
+            messagebox.showwarning("Activation Required", 
+            "Please activate the member before saving the details.")
+            return
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(""" UPDATE members SET duration = ?, fees = ?, status = ?,
+                date_of_activation = ? WHERE id = ?""",(*updated_values[1:], updated_values[0]))
+
+            self.member_window.destroy()
+            self.show_content("Gym Accounts")
+            messagebox.showinfo("Success", "Member activated successfully.")
+
+        except sqlite3.Error as e:
+            messagebox.showerror("Database Error", f"An error occurred: {str(e)}")
+        
+def check_internet():
+    """Checks for an active internet connection."""
+    try:
+        socket.create_connection(("8.8.8.8", 53), timeout=5)
+        return True
+    except OSError:
+        return False
 
 def main():
     if not check_internet():
@@ -4777,14 +4785,6 @@ def main():
         root = tk.Tk()
         GymManagerApp(root)
         root.mainloop()
-
-def check_internet():
-    """Checks for an active internet connection."""
-    try:
-        socket.create_connection(("8.8.8.8", 53), timeout=5)
-        return True
-    except OSError:
-        return False
 
 if __name__ == "__main__":
     main()
