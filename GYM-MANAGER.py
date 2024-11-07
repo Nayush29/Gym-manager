@@ -4330,18 +4330,18 @@ class GymManagerApp:
         current_month = datetime.now().strftime("%m-%Y")
         previous_month = (datetime.now() - relativedelta(months=1)).strftime("%m-%Y")
 
-        month_str = current_month if month == "This Month" else previous_month
+        self.month_str = current_month if month == "This Month" else previous_month
 
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 
-                cursor.execute(""" SELECT SUM(CASE WHEN notified = 'True' THEN 1 ELSE 0 END) AS true_count, SUM(CASE WHEN notified = 'False' THEN 1 ELSE 0 END) AS false_count FROM members WHERE status = 'Inactive' AND substr(expiration_date, 4, 7) = ? """, (month_str,))
+                cursor.execute(""" SELECT SUM(CASE WHEN notified = 'True' THEN 1 ELSE 0 END) AS true_count, SUM(CASE WHEN notified = 'False' THEN 1 ELSE 0 END) AS false_count FROM members WHERE status = 'Inactive' AND substr(expiration_date, 4, 7) = ? """, (self.month_str,))
 
                 result = cursor.fetchone()
                 true_count, false_count = (0, 0) if result == (None, None) else result
 
-                cursor.execute(""" SELECT id, name, phone_number, duration, expiration_date FROM members WHERE status = 'Inactive' AND substr(expiration_date, 4, 7) = ?""", (month_str,))
+                cursor.execute(""" SELECT id, name, phone_number, duration, expiration_date FROM members WHERE status = 'Inactive' AND substr(expiration_date, 4, 7) = ?""", (self.month_str,))
                 rows = cursor.fetchall()
 
         except sqlite3.Error as e:
@@ -4360,11 +4360,12 @@ class GymManagerApp:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute(""" SELECT id, name, phone_number, duration, expiration_date FROM members WHERE status = 'Inactive' AND substr(expiration_date, 4, 7) = ? AND notified = 'False' """,
-                (self.expiration_month,))
+                (self.month_str,))
                 rows = cursor.fetchall()
 
             if not rows:
-                messagebox.showinfo("No Members to Notify", "All inactive members have already been notified.")
+                messagebox.showinfo("Notification Status",
+                "All inactive members are notified.\nNo further notifications are needed.")
                 return
 
             self.message_count = self.load_message_count()
@@ -4375,14 +4376,19 @@ class GymManagerApp:
                 return 
 
             if not self.is_whatsapp_logged_in():
-                messagebox.showerror("WhatsApp Login Error", "WhatsApp Web is not logged in.\nPlease log in and try again.")
+                messagebox.showerror("WhatsApp Login Error",
+                "WhatsApp Web is not logged in.\nPlease log in and try again.")
                 return
 
             messages_sent = self.process_and_send_messages(rows)
 
             if messages_sent == len(rows):
-                messagebox.showinfo("All Inactive Members Notified!", "All inactive members have been successfully alerted about their membership status!")
-                self.show_content("Gym Accounts")
+                messagebox.showinfo("Notification Status",
+                "All inactive members have been successfully alerted about their membership status!")
+                if self.month_str == datetime.now().strftime("%m-%Y"):
+                    self.refresh_inactive_members("This Month")
+                else:
+                    self.refresh_inactive_members("Last Month")
             else:
                 self.handle_license_limit(expiration_date)
 
@@ -4418,7 +4424,7 @@ class GymManagerApp:
                 
             expiration_date = datetime.strptime(expiration_date_str, "%d-%m-%Y").date()
             is_valid = datetime.now().date() <= expiration_date
-            return is_valid, expiration_date
+            return is_valid, expiration_date_str
 
         except sqlite3.Error as e:
             messagebox.showerror("Database Error", f"An error occurred: {str(e)}")
@@ -4476,7 +4482,7 @@ class GymManagerApp:
             phone_number_with_code = f"+91{phone_number}"
 
             try:
-                self.kit.sendwhatmsg_instantly(phone_number_with_code, message, 20, True)
+                self.kit.sendwhatmsg_instantly(phone_number_with_code, message, 4, True)
                 messages_sent += 1
 
                 with sqlite3.connect(self.db_path) as conn:
@@ -4606,12 +4612,12 @@ class GymManagerApp:
 
             if current_date <= expiration_date:
                 messagebox.showinfo("License Key Valid",
-                f"Congratulations!\n\nYour license key '{license_key}' is valid until {expiration_date}.\n\nYou can now send WhatsApp messages seamlessly!")
-                self.save_app_data(license_key_expiration=expiration_date)
+                f"Congratulations!\n\nYour license key '{license_key}' is valid until {expiration_date_str}.\n\nYou can now send WhatsApp messages seamlessly!")
+                self.save_app_data(license_key_expiration=expiration_date_str)
                 self.show_content("Gym Accounts")
             else:
                 messagebox.showerror("License Key Expired",
-                f"Unfortunately,\n\nYour license key '{license_key}' expired on {expiration_date}.\n\nPlease renew your license to continue using the service.")
+                f"Unfortunately,\n\nYour license key '{license_key}' expired on {expiration_date_str}.\n\nPlease renew your license to continue using the service.")
 
         except requests.exceptions.RequestException as e:
             messagebox.showerror("License Fetch Error",

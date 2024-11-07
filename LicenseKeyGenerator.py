@@ -23,7 +23,7 @@ class LicenseKeyGenerator:
 
     def _setup_ui(self):
         """Setup the user interface components."""
-        tk.Label(self.root, "Enter expiration duration in months.", font=("Arial", 12, "bold")).pack(pady=10)
+        tk.Label(self.root, text="Enter expiration duration in months.", font=("Arial", 12, "bold")).pack(pady=10)
 
         self.expiration_entry = tk.Entry(self.root, font=("Arial", 14))
         self.expiration_entry.pack(pady=5)
