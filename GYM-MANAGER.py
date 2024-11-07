@@ -4501,7 +4501,6 @@ class GymManagerApp:
 
         self.root.deiconify()
         self.root.state("zoomed")
-
         return messages_sent
 
     def handle_error(self, title, message):
