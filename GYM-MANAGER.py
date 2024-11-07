@@ -3489,8 +3489,8 @@ class GymManagerApp:
             "✂️ Delete": self.RED_BG_COLOR,
             "✅ Submit": self.GREEN_BG_COLOR,
             "⚠️ Alert" : self.RED_BG_COLOR,
-            "🚀 Validate": self.BLUE_BG_COLOR,
-            "🚫 Cancel": self.RED_BG_COLOR,
+            "Validate": self.BLUE_BG_COLOR,
+            "Cancel": self.RED_BG_COLOR,
             "View Members": self.BG_COLOR,
             "Search": "#FFB300"}
 
@@ -3686,7 +3686,7 @@ class GymManagerApp:
 
         month_dropdown = tk.OptionMenu(top_frame, self.selected_month, *month_options)
         month_dropdown.pack(side=tk.LEFT)
-        month_dropdown.config(font=(self.FONT_SMALL),bg=self.BG_COLOR, fg=self.FG_COLOR)
+        month_dropdown.config(font=self.FONT_SMALL, bg=self.BG_COLOR, fg=self.FG_COLOR)
         self.selected_month.trace_add("write", lambda *args: self.populate_treeview())
 
         search_button = tk.Button(
@@ -3795,7 +3795,7 @@ class GymManagerApp:
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
-                cursor.execute(""" SELECT DISTINCT substr(date_of_activation, 4, 7) FROM members WHERE date_of_activation IS NOT NULL ORDER BY date_of_activation DESC """)
+                cursor.execute(""" SELECT DISTINCT substr(date_of_activation, 4, 7) AS activation_month_year FROM members WHERE date_of_activation IS NOT NULL ORDER BY activation_month_year DESC """)
                 months = [row[0] for row in cursor.fetchall() if row[0] is not None]
 
                 formatted_months = [datetime.strptime(month, "%m-%Y").strftime("%B %Y") for month in months]
@@ -4154,7 +4154,7 @@ class GymManagerApp:
 
         month_dropdown = tk.OptionMenu(section_frame, self.selected_month, *month_options)
         month_dropdown.grid(row=0, column=1, padx=(0,10), pady=10)
-        month_dropdown.config(font=(self.FONT_SMALL),bg=self.BG_COLOR, fg=self.FG_COLOR)
+        month_dropdown.config(font=self.FONT_SMALL, bg=self.BG_COLOR, fg=self.FG_COLOR)
 
         view_month_button = tk.Button(
             section_frame,
@@ -4255,31 +4255,20 @@ class GymManagerApp:
         self.inner_frame = tk.Frame(self.Notification_frame)
         self.inner_frame.pack(fill=tk.BOTH, expand=True)
 
-        self.expiration_month = datetime.now().strftime("%m-%Y")
+        self.top_frame = tk.Frame(self.inner_frame)
+        self.top_frame.pack(fill=tk.X, padx=20, pady=10)
 
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                
-                cursor.execute(""" SELECT SUM(CASE WHEN notified = 'True' THEN 1 ELSE 0 END) AS true_count, SUM(CASE WHEN notified = 'False' THEN 1 ELSE 0 END) AS false_count FROM members WHERE status = 'Inactive' AND substr(expiration_date, 4, 7) = ? """, (self.expiration_month,))
+        tk.Label(self.top_frame, text="Inactive Members Details", font=self.FONT_MEDIUM).pack(anchor=tk.CENTER)
 
-                result = cursor.fetchone()
-                true_count, false_count = (0, 0) if result == (None, None) else result
+        display_months = ["Last Month", "This Month"]
+        selected_display_month = tk.StringVar(value=display_months[1])
 
-                cursor.execute(""" SELECT id, name, phone_number, duration, expiration_date FROM members WHERE status = 'Inactive' AND substr(expiration_date, 4, 7) = ?""", (self.expiration_month,))
-                rows = cursor.fetchall()
+        selected_display_month.trace_add("write",
+        lambda *args: self.refresh_inactive_members(selected_display_month.get()))
 
-        except sqlite3.Error as e:
-            messagebox.showerror("Database Error", f"An error occurred: {str(e)}")
-            return
-
-        top_frame = tk.Frame(self.inner_frame)
-        top_frame.pack(fill=tk.X, padx=20, pady=10)
-
-        tk.Label(top_frame, text="Inactive Members Details", font=self.FONT_MEDIUM).pack(anchor=tk.CENTER)
-
-        tk.Label(top_frame, text=f"Notified: {true_count} ✅", font=self.FONT_SMALL, fg="#76FF03").pack(side=tk.RIGHT, padx=(10, 0))
-        tk.Label(top_frame, text=f"Unnotified: {false_count} ❎", font=self.FONT_SMALL, fg="#00B0FF").pack(side=tk.RIGHT)
+        month_dropdown_menu = tk.OptionMenu(self.top_frame, selected_display_month, *display_months)
+        month_dropdown_menu.config(font=self.FONT_SMALL, bg=self.BG_COLOR, fg=self.FG_COLOR)
+        month_dropdown_menu.pack(side=tk.LEFT)
 
         self.tree = ttk.Treeview(
             self.inner_frame,
@@ -4303,9 +4292,6 @@ class GymManagerApp:
         self.tree.column("duration", width=50, anchor="center")
         self.tree.column("Inactivation_date", width=120, anchor="center")
 
-        for row in rows:
-            self.tree.insert("", tk.END, values=row)
-
         scrollbar = ttk.Scrollbar(self.inner_frame, orient=tk.VERTICAL, command=self.tree.yview)
         self.tree.configure(yscroll=scrollbar.set)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
@@ -4315,10 +4301,10 @@ class GymManagerApp:
         base_frame.pack(pady=10, anchor=tk.CENTER)
 
         alert_button = tk.Button(base_frame, bg=self.RED_BG_COLOR, fg=self.FG_COLOR, font=self.FONT_SMALL, text="⚠️ Alert", command=self.send_whatsapp_message)
-        alert_button.pack(side=tk.LEFT, ipadx=self.button_padding)
+        alert_button.pack(side=tk.LEFT, padx=20, ipadx=self.button_padding)
 
         update_button = tk.Button(base_frame, bg=self.GREEN_BG_COLOR, fg=self.FG_COLOR, font=self.FONT_SMALL, text="⬆️ Update", command=self.update_inactive)
-        update_button.pack(side=tk.RIGHT, padx=20, ipadx=self.button_padding)
+        update_button.pack(side=tk.RIGHT, ipadx=self.button_padding)
 
         for button in (alert_button, update_button):
             button.bind("<Enter>", lambda event: self.on_hover(event, is_enter=True))
@@ -4328,7 +4314,45 @@ class GymManagerApp:
 
         self.style = ttk.Style()
         self.style.configure("Custom.Treeview.Heading", font=self.FONT_MEDIUM_TABLE)
-        self.style.configure("Custom.Treeview", font=self.FONT_SMALL_TABLE, rowheight=30)
+        self.style.configure("Custom.Treeview", font=self.FONT_SMALL_TABLE, rowheight=34)
+
+        self.refresh_inactive_members(selected_display_month.get()) 
+
+    def refresh_inactive_members(self, month):
+        """Refreshes the inactive members list based on the selected month."""
+        for widget in self.top_frame.winfo_children():
+            if isinstance(widget, tk.Label) and (widget.cget("text").startswith("Notified:") or widget.cget("text").startswith("Unnotified:")):
+                widget.destroy()
+
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+
+        current_month = datetime.now().strftime("%m-%Y")
+        previous_month = (datetime.now() - relativedelta(months=1)).strftime("%m-%Y")
+
+        month_str = current_month if month == "This Month" else previous_month
+
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                cursor.execute(""" SELECT SUM(CASE WHEN notified = 'True' THEN 1 ELSE 0 END) AS true_count, SUM(CASE WHEN notified = 'False' THEN 1 ELSE 0 END) AS false_count FROM members WHERE status = 'Inactive' AND substr(expiration_date, 4, 7) = ? """, (month_str,))
+
+                result = cursor.fetchone()
+                true_count, false_count = (0, 0) if result == (None, None) else result
+
+                cursor.execute(""" SELECT id, name, phone_number, duration, expiration_date FROM members WHERE status = 'Inactive' AND substr(expiration_date, 4, 7) = ?""", (month_str,))
+                rows = cursor.fetchall()
+
+        except sqlite3.Error as e:
+            messagebox.showerror("Database Error", f"An error occurred: {str(e)}")
+            return
+
+        tk.Label(self.top_frame, text=f"Notified: {true_count} ✅", font=self.FONT_SMALL, fg="#76FF03").pack(side=tk.RIGHT, padx=(10, 0))
+        tk.Label(self.top_frame, text=f"Unnotified: {false_count} ❎", font=self.FONT_SMALL, fg="#00B0FF").pack(side=tk.RIGHT)
+
+        for row in rows:
+            self.tree.insert("", tk.END, values=row)
 
     def send_whatsapp_message(self):
         """Send WhatsApp messages to a list of users if logged in."""
@@ -4373,7 +4397,7 @@ class GymManagerApp:
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
-                cursor.execute(" SELECT message_count FROM app_data ORDER BY id DESC LIMIT 1 ")
+                cursor.execute("SELECT message_count FROM app_data")
                 result = cursor.fetchone()
             return result[0] if result else 0
         except sqlite3.Error as e:
@@ -4385,7 +4409,7 @@ class GymManagerApp:
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
-                cursor.execute(" SELECT license_key_expiration FROM app_data ORDER BY id DESC LIMIT 1 ")
+                cursor.execute("SELECT license_key_expiration FROM app_data")
                 result = cursor.fetchone()
             expiration_date_str = result[0] if result else None
 
@@ -4514,21 +4538,21 @@ class GymManagerApp:
 
         validate_button = tk.Button(
             buttons_frame,
-            text="🚀 Validate",
+            text="Validate",
             font=self.FONT_SMALL,
             bg=self.BLUE_BG_COLOR,
             fg=self.FG_COLOR,
             command=lambda: self.check_license_key(self.license_entry.get()))
-        validate_button.pack(side=tk.LEFT, ipadx=self.button_padding)
+        validate_button.pack(side=tk.LEFT, padx=20, ipadx=self.button_padding)
 
         Cancel_button = tk.Button(
             buttons_frame,
-            text="🚫 Cancel",
+            text="Cancel",
             font=self.FONT_SMALL,
             bg=self.RED_BG_COLOR,
             fg=self.FG_COLOR,
             command=lambda: self.show_content("Gym Accounts"))
-        Cancel_button.pack(side=tk.RIGHT, padx=20, ipadx=self.button_padding)
+        Cancel_button.pack(side=tk.RIGHT, ipadx=self.button_padding)
 
         for button in(validate_button, Cancel_button):
             button.bind("<Enter>", lambda event: self.on_hover(event, is_enter=True))
