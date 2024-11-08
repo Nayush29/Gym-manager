@@ -4482,7 +4482,7 @@ class GymManagerApp:
             phone_number_with_code = f"+91{phone_number}"
 
             try:
-                self.kit.sendwhatmsg_instantly(phone_number_with_code, message, 4, True)
+                self.kit.sendwhatmsg_instantly(phone_number_with_code, message, 20, True)
                 messages_sent += 1
 
                 with sqlite3.connect(self.db_path) as conn:
