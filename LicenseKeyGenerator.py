@@ -99,7 +99,7 @@ class LicenseKeyGenerator:
         """Generate a PDF invoice for the license key."""
         subscription_fee = self.SUBSCRIPTION_FEES[months]
         months_str = f"{months} month" if months == 1 else f"{months} month's"
-        Number = "+91" + Number
+        Number = f"(+91){Number}"
         Name = name.capitalize()
 
         html_content = f"""<!DOCTYPE html>
