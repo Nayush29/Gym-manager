@@ -108,11 +108,11 @@ class LicenseKeyGenerator:
         name = name.capitalize()
 
         # Calculate GST (assuming 18%)
-        gst = round(subscription_fee * 0.18, 2)
-        total_amount = round(subscription_fee + gst, 2)
+        gst = round(subscription_fee * 0.18, 0)
+        total_amount = round(subscription_fee + gst, 0)
 
         # Invoice details
-        invoice_number = f"INV{datetime.now().strftime('%Y%m%d')}"
+        invoice_number = f"INV{datetime.now().strftime('%Y%m%d')}{random.randint(1, 100)}{license_key.strip()[:3]}"
         date = datetime.now().strftime('%d-%m-%Y')
 
         # Prepare the HTML content for the invoice
