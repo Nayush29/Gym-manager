@@ -14,7 +14,7 @@ class LicenseKeyGenerator:
     output_folder = os.path.join(REPO_PATH, "Invoice's")
     os.makedirs(output_folder, exist_ok=True)
     EXPIRATION_OPTIONS = {"1 Month": 1, "3 Month's": 3, "6 Month's": 6, "12 Month's": 12}
-    SUBSCRIPTION_FEES = { 1: 449, 3: 1199,  6: 1599, 12: 1999 }
+    SUBSCRIPTION_FEES = {1: 380, 3: 846, 6: 1270, 12: 1694}
 
     def __init__(self, root):
         self.root = root
@@ -108,8 +108,8 @@ class LicenseKeyGenerator:
         name = name.capitalize()
 
         # Calculate GST (assuming 18%)
-        gst = round(subscription_fee * 0.18, 0)
-        total_amount = round(subscription_fee + gst, 0)
+        gst = round(subscription_fee * 0.18, 2)  # round GST to 2 decimal places if needed
+        total_amount = round(subscription_fee + gst, 2)
 
         # Invoice details
         invoice_number = f"INV{datetime.now().strftime('%Y%m%d')}{random.randint(1, 100)}{license_key.strip()[:3]}"
